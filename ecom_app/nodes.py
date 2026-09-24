@@ -144,16 +144,22 @@ def make_nodes(llm, comfy):
         if not questions:
             _log("clarify: LLM has no further questions")
             return {"clarification_qa": []}
-        answers = interrupt({
-            "type": "clarify",
-            "question": "A few quick questions before planning the shoot:",
-            "questions": questions,
-        })
-        if isinstance(answers, str):
-            answers = [answers]
-        qa = [{"question": q, "answer": str(a)} for q, a in zip(questions, list(answers))]
-        for item in qa:
-            _log(f"clarify: {item['question']} -> {item['answer']}")
+        if state.get("auto_approve"):
+            # hands-off mode: never block on input; tell the LLM to use its judgment
+            qa = [{"question": q, "answer": "not specified by the seller; use your best judgment"}
+                  for q in questions]
+            _log(f"clarify: {len(questions)} question(s) auto-answered (--auto-approve)")
+        else:
+            answers = interrupt({
+                "type": "clarify",
+                "question": "A few quick questions before planning the shoot:",
+                "questions": questions,
+            })
+            if isinstance(answers, str):
+                answers = [answers]
+            qa = [{"question": q, "answer": str(a)} for q, a in zip(questions, list(answers))]
+            for item in qa:
+                _log(f"clarify: {item['question']} -> {item['answer']}")
         # merge the new answers back into the profile
         merged = llm.chat_json(
             task="profile",
@@ -297,9 +303,11 @@ def make_nodes(llm, comfy):
         for i, shot in enumerate(plan.shots[:num]):
             shot.id = i + 1
             shot.seed = base_seed + i
-            refs = list(state["image_paths"]) if shot.uses_product_ref else []
-            if shot.uses_persona and persona.get("local_path"):
-                refs = refs + [persona["local_path"]]
+            persona_path = persona.get("local_path") if shot.uses_persona else None
+            max_product = 2 if persona_path else 3  # the edit workflow has 3 ref slots total
+            refs = list(state["image_paths"])[:max_product] if shot.uses_product_ref else []
+            if persona_path:
+                refs = refs + [persona_path]
             shot.reference_images = refs
             shot.workflow = "edit" if refs else "t2i"
             shots.append(shot.model_dump())

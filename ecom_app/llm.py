@@ -16,6 +16,9 @@ from pathlib import Path
 
 logger = logging.getLogger("ecom_app.llm")
 
+# Windows' mimetypes DB often lacks webp; make sure data-URIs get the right type.
+mimetypes.add_type("image/webp", ".webp")
+
 
 class LLMClient:
     def __init__(
