@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+
+# Generated outputs and runtime artifacts
+output/
+test_output/
+download_log.txt
+download_err.txt
+make_video.log
+make_video.err

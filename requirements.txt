@@ -1,0 +1,4 @@
+modal>=1.0,<2
+# required by ComfyUI to load the .safetensors model weights downloaded by
+# comfyui_app.py (Qwen-Image-2.1, MiniMax H3, ...)
+safetensors>=0.4
