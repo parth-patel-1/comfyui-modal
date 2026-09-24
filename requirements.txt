@@ -2,3 +2,10 @@ modal>=1.0,<2
 # required by ComfyUI to load the .safetensors model weights downloaded by
 # comfyui_app.py (Qwen-Image-2.1, MiniMax H3, ...)
 safetensors>=0.4
+
+# E-commerce product-image app (ecom_app/, run_product_shoot.py): LangGraph
+# orchestration + OpenAI-compatible LLM client. Local-only dependencies — the
+# Modal image builds from ComfyUI's own requirements and never installs these.
+langgraph>=0.2
+openai>=1.0
+pydantic>=2
