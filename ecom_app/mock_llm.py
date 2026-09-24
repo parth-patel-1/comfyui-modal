@@ -9,6 +9,7 @@ echoes relevant fields back.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 _PHOTOREAL = (
@@ -33,6 +34,41 @@ class MockLLM:
         return handler(payload)
 
     # ------------------------------------------------------------------
+    def _parse(self, p: dict) -> dict:
+        desc = (p.get("description") or "").strip()
+        lower = desc.lower()
+        words = []
+        for w in desc.replace(",", " ").split():
+            if w[0].isdigit():
+                break  # stop before dimensions/numbers leak into the name
+            words.append(w)
+        name = " ".join(words[:4]) or "Product"
+        wearables = ("saree", "sari", "dress", "kurti", "gown", "shirt", "lehenga",
+                     "necklace", "earring", "bangle", "ring", "jewelry", "jewellery")
+        if any(k in lower for k in ("saree", "sari")):
+            category = "apparel/saree"
+        elif any(k in lower for k in ("lehenga", "kurti", "dress", "gown", "shirt")):
+            category = "apparel"
+        elif any(k in lower for k in ("necklace", "earring", "bangle", "ring",
+                                      "jewelry", "jewellery")):
+            category = "jewelry"
+        else:
+            category = "general"
+        m = re.search(
+            r"\d+(?:\.\d+)?\s*(?:m|cm|mm|ft|in)\s*[x\u00d7]\s*\d+(?:\.\d+)?\s*(?:m|cm|mm|ft|in)",
+            lower,
+        )
+        features = [s.strip() for s in desc.split(",")[1:4] if s.strip()][:3] or ["premium quality"]
+        return {
+            "name": name,
+            "category": category,
+            "dimensions": m.group(0) if m else "",
+            "features": features,
+            "materials": "",
+            "needs_human_model": any(k in lower for k in wearables),
+            "notes": "",
+        }
+
     def _analyze(self, p: dict) -> dict:
         name = p.get("product_name_hint") or "product"
         img = Path(p.get("image_file", "photo.jpg")).name

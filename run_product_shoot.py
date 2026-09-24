@@ -4,12 +4,11 @@
 Real run (needs an OpenAI-compatible LLM endpoint):
   set ECOM_LLM_BASE_URL=https://your-llm-endpoint/v1
   set ECOM_LLM_API_KEY=sk-...
-  python run_product_shoot.py --images raw1.jpg raw2.jpg --name "Banarasi silk saree" ^
-      --category "apparel/saree" --dimensions "6.3 m x 1.15 m" ^
-      --features "pure silk" "gold zari border" --num-images 4
+  python run_product_shoot.py --images raw1.jpg raw2.jpg --num-images 4 ^
+      --description "Banarasi silk saree, 6.3 m x 1.15 m, pure silk with gold zari border, handwoven"
 
 Zero-cost dry run (mock LLM, no GPU, writes placeholder PNGs):
-  python run_product_shoot.py --images raw1.jpg --name "Test saree" --dry-run --auto-approve
+  python run_product_shoot.py --images raw1.jpg --description "Test saree, red silk" --dry-run --auto-approve
 """
 
 from __future__ import annotations
@@ -36,11 +35,10 @@ def parse_args(argv=None):
         description="Generate premium e-commerce product images (LangGraph + LLM + ComfyUI)."
     )
     p.add_argument("--images", nargs="+", required=True, help="raw product photo(s), 1-3")
-    p.add_argument("--name", required=True, help="product name")
-    p.add_argument("--category", default="", help="product category")
-    p.add_argument("--dimensions", default="", help="product dimensions")
-    p.add_argument("--features", nargs="*", default=[], help="key product features")
-    p.add_argument("--materials", default="", help="materials")
+    p.add_argument("--description", required=True,
+                   help="one free-text product description mentioning everything "
+                        "(name, category, size, features, materials...); the LLM "
+                        "extracts the structured profile from it")
     p.add_argument("--num-images", type=int, default=None,
                    help="how many images to generate (default: 4; the LLM plans the shots)")
     p.add_argument("--style", default="premium studio + lifestyle mix")
@@ -115,13 +113,7 @@ def main(argv=None) -> int:
 
     state = {
         "image_paths": [str(Path(p).resolve()) for p in args.images],
-        "product_info": {
-            "name": args.name,
-            "category": args.category,
-            "dimensions": args.dimensions,
-            "features": args.features,
-            "materials": args.materials,
-        },
+        "description": args.description,
         "num_images": args.num_images,
         "style": args.style,
         "target_platform": args.platform,
@@ -134,7 +126,8 @@ def main(argv=None) -> int:
     }
     config = {"configurable": {"thread_id": f"ecom-{uuid.uuid4().hex[:8]}"}}
     mode = "DRY RUN" if args.dry_run else ("mock LLM" if args.mock_llm else "live")
-    print(f"Running product shoot for '{args.name}' ({mode}) ...")
+    desc = args.description
+    print(f"Running product shoot ({mode}) for: {desc[:90]}{'...' if len(desc) > 90 else ''}")
 
     result = graph.invoke(state, config)
     while "__interrupt__" in result:

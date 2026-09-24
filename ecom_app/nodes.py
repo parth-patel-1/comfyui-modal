@@ -51,13 +51,36 @@ def _write_placeholder(path: Path) -> None:
 def make_nodes(llm, comfy):
     """Builds the node callables, closing over the LLM and ComfyUI clients."""
 
+    # ---- 0. LLM-parse the seller's free-text description -----------------
+    def parse_description(state: dict) -> dict:
+        info = state.get("product_info") or {}
+        desc = (state.get("description") or "").strip()
+        if info.get("name") or not desc:
+            return {"product_info": info}  # programmatic callers may pass product_info directly
+        data = llm.chat_json(
+            task="parse",
+            system=prompts.PARSE_DESCRIPTION_SYSTEM,
+            user=json.dumps({"description": desc}),
+        )
+        info = {
+            "name": (data.get("name") or "").strip() or "Product",
+            "category": (data.get("category") or "").strip() or "general",
+            "dimensions": (data.get("dimensions") or "").strip(),
+            "features": [str(f).strip() for f in (data.get("features") or []) if str(f).strip()],
+            "materials": (data.get("materials") or "").strip(),
+            "needs_human_model": bool(data.get("needs_human_model")),
+        }
+        _log(f"description parsed: {info['name']} | {info['category']} | "
+             f"{len(info['features'])} feature(s) | needs model: {info['needs_human_model']}")
+        return {"product_info": info}
+
     # ---- 1. validate inputs, prepare output dir -------------------------
     def load_inputs(state: dict) -> dict:
         paths = [Path(p) for p in state["image_paths"]]
         missing = [str(p) for p in paths if not p.is_file()]
         if missing:
             raise ValueError(f"image file(s) not found: {missing}")
-        slug = _slug(state.get("product_info", {}).get("name"))
+        slug = _slug((state.get("product_info") or {}).get("name"))
         out_dir = Path(state["output_dir"]) / slug
         out_dir.mkdir(parents=True, exist_ok=True)
         _log(f"inputs ok: {len(paths)} image(s); output -> {out_dir}")
@@ -65,6 +88,7 @@ def make_nodes(llm, comfy):
 
     # ---- 2. vision-LLM analysis of every uploaded photo -----------------
     def analyze_images(state: dict) -> dict:
+        info = state.get("product_info") or {}
         analyses = []
         for p in state["image_paths"]:
             _log(f"analyzing {Path(p).name} ...")
@@ -72,8 +96,8 @@ def make_nodes(llm, comfy):
                 task="analyze",
                 system=prompts.ANALYZE_IMAGE_SYSTEM,
                 user=json.dumps({
-                    "product_name_hint": state.get("product_info", {}).get("name", ""),
-                    "category_hint": state.get("product_info", {}).get("category", ""),
+                    "product_name_hint": info.get("name", ""),
+                    "category_hint": info.get("category", ""),
                     "image_file": Path(p).name,
                 }),
                 images=[p],
@@ -87,7 +111,7 @@ def make_nodes(llm, comfy):
     # ---- 3. merge analyses + seller info into the canonical profile -----
     def build_profile(state: dict) -> dict:
         payload = {
-            "user_provided_product_info": state.get("product_info", {}),
+            "user_provided_product_info": state.get("product_info") or {},
             "image_analyses": state.get("image_analyses", []),
             "defaults": {
                 "style": state.get("style"),
@@ -135,7 +159,7 @@ def make_nodes(llm, comfy):
             task="profile",
             system=prompts.PROFILE_SYSTEM,
             user=json.dumps({
-                "user_provided_product_info": state.get("product_info", {}),
+                "user_provided_product_info": state.get("product_info") or {},
                 "image_analyses": state.get("image_analyses", []),
                 "defaults": {"style": state.get("style"), "target_platform": state.get("target_platform")},
                 "clarifications": qa,
@@ -453,6 +477,7 @@ def make_nodes(llm, comfy):
         return {"manifest_path": str(path)}
 
     return {
+        "parse_description": parse_description,
         "load_inputs": load_inputs,
         "analyze_images": analyze_images,
         "build_profile": build_profile,

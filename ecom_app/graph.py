@@ -2,7 +2,7 @@
 
 Flow (interrupt points marked *):
 
-    load_inputs -> analyze_images -> build_profile -> clarify_loop* ->
+    parse_description -> load_inputs -> analyze_images -> build_profile -> clarify_loop* ->
     decide_model -+-> generate_persona -> persona_review* --(regenerate)--+
                   |        ^                                              |
                   |        +----------------------------------------------+
@@ -26,7 +26,8 @@ from .nodes import make_nodes
 class EcomState(TypedDict, total=False):
     # ── inputs (set by the driver) ──────────────────────────────────────
     image_paths: list[str]
-    product_info: dict
+    description: str                # one free-text seller description
+    product_info: dict              # filled by parse_description (or passed directly)
     num_images: Optional[int]
     style: str
     target_platform: str
@@ -79,7 +80,8 @@ def build_graph(llm: Any, comfy: Any):
     for name, fn in nodes.items():
         g.add_node(name, fn)
 
-    g.add_edge(START, "load_inputs")
+    g.add_edge(START, "parse_description")
+    g.add_edge("parse_description", "load_inputs")
     g.add_edge("load_inputs", "analyze_images")
     g.add_edge("analyze_images", "build_profile")
     g.add_edge("build_profile", "clarify_loop")
