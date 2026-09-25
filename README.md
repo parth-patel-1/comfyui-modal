@@ -7,6 +7,12 @@ GPUs and use it as a website from your browser — no local GPU needed.
 Browser ──> https://<your-workspace>--comfyui.modal.run ──> Modal GPU container ──> ComfyUI web UI
 ```
 
+Alongside the hosted ComfyUI website, this repo now ships an **e-commerce
+product studio** - a Streamlit UI (`streamlit_app.py`) that turns raw product
+photos into polished marketplace images (LangGraph + LLM planning,
+Qwen-Image-2.1 rendering) and MiniMax H3 clips. See
+[E-commerce product studio](#e-commerce-product-studio-streamlit-ui).
+
 ## What gets created on your Modal account
 
 | Resource | Name | Purpose |
@@ -173,7 +179,9 @@ Notes:
   turbo LoRA and drop from 20 steps to 8 (~2.5× faster, slight quality
   trade-off). Default is quality mode (no LoRA, 20 steps).
 - **Image-to-video:** connect images to the `first_frame` / `last_frame` inputs
-  of the MiniMaxH3ImageToVideo node.
+  of the MiniMaxH3ImageToVideo node. The Streamlit **Video studio** tab does
+  this for you - pick a first frame from an upload or reuse a shot from your
+  last run.
 - **Sigma shift:** the **ModelSamplingMiniMaxH3** node (video shift 12 / audio
   shift 3) is required — it gives the model its audio-aware sampling schedule.
   Do not swap it for a generic *Model Sampling* node (SD3 / AuraFlow / Flux):
@@ -183,7 +191,64 @@ Notes:
   offloading; set `GPU_CONFIG = "L40S"` in `comfyui_app.py` for ~2–3× faster
   generation.
 - **Scripts:** POST `workflows/minimax_h3_t2v_api.json` to `/prompt`, poll
-  `/history/<prompt_id>`, fetch the MP4 from `/view`.
+  `/history/<prompt_id>`, fetch the MP4 from `/view`. The **Video studio** tab automates this
+  submit-poll-download flow.
+
+## E-commerce product studio (Streamlit UI)
+
+`streamlit_app.py` is a browser UI for the whole pipeline - no workflow editing.
+You give it raw product photo(s) plus a short description; an LLM plans the
+shoot, reviews AI-generated model personas, and writes the image prompts; and
+Qwen-Image-2.1 renders polished marketplace shots with a vision-QA pass. A
+**Video studio** tab renders MiniMax H3 clips - text-to-video, or
+image-to-video using one of your shots as the first frame.
+
+1. Install the local dependencies (Modal CLI + the studio):
+   ```powershell
+   pip install -r requirements.txt
+   ```
+2. Give it an OpenAI-compatible LLM: create a `.env` in the repo root (loaded
+   automatically; real environment variables take precedence) or export the
+   variables:
+   ```powershell
+   # .env
+   ECOM_LLM_BASE_URL=https://your-llm-endpoint/v1   # OpenAI, OpenRouter, vLLM, ...
+   ECOM_LLM_API_KEY=sk-...
+   ```
+   The same fields are editable in the app's sidebar. The ComfyUI server URL
+   defaults to your deployed app and can be overridden with `COMFYUI_URL`.
+3. Launch and open http://localhost:8501:
+   ```powershell
+   streamlit run streamlit_app.py
+   ```
+
+The sidebar **Mode** controls how much is real:
+
+| Mode | Behavior |
+|---|---|
+| Live | Real LLM + real ComfyUI on Modal |
+| Mock LLM | Scripted LLM, real ComfyUI (try the UI without an LLM key) |
+| Dry run | Scripted LLM + placeholder images, no GPU calls (free and instant) |
+
+Tabs:
+
+| Tab | What you do |
+|---|---|
+| **Product shoot** | Upload 1-3 product photos + describe the product; pick style, platform, image count and advanced options (model policy, own model photo, output dir). The pipeline's interactive steps appear as widgets - clarify questions, generate-vs-upload for model shots, persona review, shot-plan approval - with a live log; you finish with a gallery, per-image QA notes and a downloadable `manifest.json` |
+| **Video studio** | Write a prompt or have the LLM draft it from a previous shoot's profile; choose resolution / duration / steps / seed; optionally set a first frame (uploaded still or a shot from your last run = image-to-video); renders in the background, then play + download the MP4 |
+| **Results** | Browse past runs under `output/ecom/` (gallery, persona, manifest) and send any profile to the video studio |
+
+Prefer the terminal? `run_product_shoot.py` runs the same pipeline as a batch
+CLI (`--images`, `--description`, `--num-images`, `--style`, `--platform`,
+`--auto-approve`, `--mock-llm`, `--dry-run`, ...):
+
+```powershell
+python run_product_shoot.py --images photo1.jpg --description "EcoBin medium garbage bags" `
+    --num-images 2 --auto-approve
+```
+
+Outputs: `output/ecom/<slug>/` (images, persona, QA notes, `manifest.json`) and
+`output/video/` for clips.
 
 ## Authentication: token ID + secret
 
@@ -338,4 +403,7 @@ so scripts can talk to it too — e.g. POST an API-format workflow JSON to
 | `launch.ps1` / `launch.sh` | One-click launcher (setup → auth → models → deploy → open site) |
 | `stop.ps1` / `stop.sh` | Take the app offline (stops GPU billing) |
 | `test_download_helper.py` | Offline smoke test of the model-download logic (no Modal account needed) |
-| `requirements.txt` | Local dependency: the `modal` CLI |
+| `requirements.txt` | Local deps: `modal` CLI + the e-commerce studio (LangGraph, OpenAI-compatible client, Streamlit, requests) |
+| `streamlit_app.py` | The e-commerce product studio web UI (see [above](#e-commerce-product-studio-streamlit-ui)) |
+| `ecom_app/` | Studio internals: LangGraph graph + nodes, LLM & ComfyUI clients, MiniMax H3 video workflow builder, threaded runners |
+| `run_product_shoot.py` | CLI for the same product-shot pipeline (batch / scripting) |
