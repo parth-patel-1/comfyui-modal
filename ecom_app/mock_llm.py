@@ -161,3 +161,17 @@ class MockLLM:
 
     def _review(self, p: dict) -> dict:
         return {"passed": True, "notes": "mock review: ok", "revised_prompt": ""}
+
+    def _video_prompt(self, p: dict) -> dict:
+        prof = p.get("product_profile") or {}
+        name = prof.get("name", "the product")
+        return {"prompt": (
+            f"Premium studio showcase video of {name}, soft diffused lighting, "
+            "seamless light-grey backdrop, subtle reflection, photorealistic.\n\n"
+            "Timeline:\n"
+            f"[0s-1.5s] Slow orbit begins around {name}, product centered and sharp.\n"
+            "[1.5s-3s] Gentle push-in toward the key detail and texture.\n"
+            "[3s-4.2s] Lateral pan reveals the product from its best angle.\n"
+            "[4.2s-5s] Slow settle on the hero composition, hold.\n\n"
+            "Audio: soft ambient instrumental pad, no speech."
+        )}

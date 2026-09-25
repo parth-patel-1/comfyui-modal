@@ -9,3 +9,5 @@ safetensors>=0.4
 langgraph>=0.2
 openai>=1.0
 pydantic>=2
+requests>=2.31
+streamlit>=1.32
