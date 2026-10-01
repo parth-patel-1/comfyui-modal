@@ -110,23 +110,31 @@ def create_generation(body: GenerationCreate, user: UserDep) -> dict:
         params = _validate_params(cfg, body.engine, body.mode,
                                   body.params, len(body.reference_paths))
         with conn.cursor() as cur:
-            cur.execute(
-                "select * from public.request_generation(%s, %s, %s, %s, %s, %s, %s, %s)",
-                (user.id, body.engine, body.mode, body.prompt,
-                 body.negative_prompt, json.dumps(params),
-                 body.reference_paths, ""),
-            )
+            try:
+                cur.execute(
+                    "select * from public.request_generation(%s, %s, %s, %s, %s, %s, %s, %s)",
+                    (user.id, body.engine, body.mode, body.prompt,
+                     body.negative_prompt, json.dumps(params),
+                     body.reference_paths, ""),
+                )
+            except psycopg.errors.DatabaseError as e:
+                conn.rollback()
+                if (getattr(e, "sqlstate", "") or "")[:2] != "P0":
+                    raise  # not a RAISE EXCEPTION from the RPC
+                msg = getattr(getattr(e, "diag", None), "message_primary", None) \
+                    or str(e).split("\n")[0].strip()
+                raise _http_for_rpc_error(msg)
             generation_id, credits = cur.fetchone()
             conn.commit()
             cur.execute(
-                "select id, engine, mode, status, progress, prompt, params, "
-                "reference_paths, credits_charged, error, output_paths, "
+                "select id, engine, mode, status, progress, started_at, prompt, "
+                "params, reference_paths, credits_charged, error, output_paths, "
                 "created_at, finished_at from public.generations where id = %s",
                 (generation_id,),
             )
             row = cur.fetchone()
-    keys = ["id", "engine", "mode", "status", "progress", "prompt", "params",
-            "reference_paths", "credits_charged", "error", "output_paths",
+    keys = ["id", "engine", "mode", "status", "progress", "started_at", "prompt",
+            "params", "reference_paths", "credits_charged", "error", "output_paths",
             "created_at", "finished_at"]
     return dict(zip(keys, row))
 
@@ -139,7 +147,7 @@ def list_generations(
 ) -> list[dict]:
     with db_conn() as conn, conn.cursor() as cur:
         cur.execute(
-            "select id, engine, mode, status, progress, prompt, params, "
+            "select id, engine, mode, status, progress, started_at, prompt, params, "
             "reference_paths, credits_charged, error, output_paths, "
             "created_at, finished_at from public.generations "
             "where user_id = %s order by created_at desc limit %s offset %s",
@@ -154,8 +162,8 @@ def list_generations(
 def get_generation(generation_id: uuid.UUID, user: UserDep) -> dict:
     with db_conn() as conn, conn.cursor() as cur:
         cur.execute(
-            "select id, user_id, engine, mode, status, progress, prompt, params, "
-            "reference_paths, credits_charged, error, output_paths, "
+            "select id, user_id, engine, mode, status, progress, started_at, prompt, "
+            "params, reference_paths, credits_charged, error, output_paths, "
             "created_at, finished_at from public.generations where id = %s",
             (generation_id,),
         )
@@ -176,11 +184,20 @@ def cancel_generation(generation_id: uuid.UUID, user: UserDep) -> dict:
             cur.execute("select public.cancel_generation(%s::uuid, %s::uuid)",
                         (generation_id, user.id))
             conn.commit()
-        except psycopg.errors.Raise as e:
+        except psycopg.errors.DatabaseError as e:
             conn.rollback()
-            msg = str(e).split("\n")[-1].strip()
+            if (getattr(e, "sqlstate", "") or "")[:2] != "P0":
+                raise  # not a RAISE EXCEPTION from the RPC
+            msg = getattr(getattr(e, "diag", None), "message_primary", None) \
+                or str(e).split("\n")[0].strip()
             raise _http_for_rpc_error(msg)
     return {"status": "canceled"}
+
+
+@router.get("/me")
+def me(user: UserDep) -> dict:
+    """Caller identity for the UI (role drives the Admin nav link)."""
+    return {"id": user.id, "email": user.email, "role": user.role}
 
 
 @router.get("/wallet", response_model=WalletOut)

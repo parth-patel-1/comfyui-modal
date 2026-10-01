@@ -1,26 +1,138 @@
 @import "tailwindcss";
 
+/* ============================================================
+   GenStudio Design Tokens — 3-layer architecture
+   primitive → semantic → component (Tailwind v4 @theme)
+   ============================================================ */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* ---- primitives: neutral scale ---- */
+  --n-0: #09090b;
+  --n-1: #101013;
+  --n-2: #17171c;
+  --n-3: #1f1f26;
+  --n-4: #2a2a33;
+  --n-5: #3f3f4b;
+  --n-6: #71717e;
+  --n-7: #a1a1ad;
+  --n-8: #d4d4dc;
+  --n-9: #fafafa;
+
+  /* ---- primitives: brand accents ---- */
+  --v-3: #4c1d95;
+  --v-4: #6d28d9;
+  --v-5: #7c5cff;
+  --v-6: #9d7eff;
+  --v-7: #c4b0ff;
+
+  --mint-5: #34d399;
+  --amber-5: #fbbf24;
+  --rose-5: #fb7185;
+  --sky-5: #38bdf8;
+
+  /* ---- semantic ---- */
+  --bg: var(--n-0);            /* app background */
+  --surface: var(--n-1);       /* cards, nav */
+  --surface-2: var(--n-2);     /* inputs, bubbles, hover */
+  --surface-3: var(--n-3);     /* raised / active */
+  --line: var(--n-3);          /* borders */
+  --line-strong: var(--n-4);
+  --fg: var(--n-9);            /* primary text */
+  --fg-muted: var(--n-7);      /* secondary text */
+  --fg-faint: var(--n-6);      /* tertiary / placeholders */
+  --accent: var(--v-5);
+  --accent-hover: var(--v-6);
+  --accent-soft: rgb(124 92 255 / 0.14);
+  --accent-line: rgb(124 92 255 / 0.38);
+  --success: var(--mint-5);
+  --warning: var(--amber-5);
+  --danger: var(--rose-5);
+  --info: var(--sky-5);
+  --ring: rgb(124 92 255 / 0.55);
+  --scrim: rgb(9 9 11 / 0.72);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-fg: var(--fg);
+  --color-muted: var(--fg-muted);
+  --color-faint: var(--fg-faint);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-line: var(--accent-line);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-info: var(--info);
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
 }
+
+/* ---- shared primitives ---- */
+
+.gs-focus:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.gs-gradient-text {
+  background: linear-gradient(100deg, var(--v-6), var(--v-5) 55%, var(--sky-5));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.gs-gradient-btn {
+  background: linear-gradient(135deg, var(--v-4), var(--v-5));
+}
+.gs-gradient-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, var(--v-3), var(--v-4));
+}
+
+/* progress shimmer while a job is running */
+.gs-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--accent-soft) 25%,
+    rgb(124 92 255 / 0.32) 50%,
+    var(--accent-soft) 75%
+  );
+  background-size: 200% 100%;
+  animation: gs-shimmer 1.6s ease-in-out infinite;
+}
+@keyframes gs-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.gs-fade-up {
+  animation: gs-fade-up 0.28s ease-out both;
+}
+@keyframes gs-fade-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gs-shimmer, .gs-fade-up { animation: none; }
+}
+
+/* thin scrollbars for the thread */
+.gs-scroll::-webkit-scrollbar { width: 8px; }
+.gs-scroll::-webkit-scrollbar-thumb {
+  background: var(--n-4); border-radius: 8px;
+}
+

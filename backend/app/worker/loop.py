@@ -34,7 +34,7 @@ with next_job as (
     limit 1
 )
 update public.generations g
-set status = 'provisioning', started_at = now(), gpu_type = coalesce((
+set status = 'provisioning', progress = 10, started_at = now(), gpu_type = coalesce((
     select case when g.engine = 'image'
                 then ms.image_gpu else ms.video_gpu end
     from public.modal_settings ms where ms.id = 1
@@ -47,6 +47,12 @@ returning g.id, g.user_id, g.engine, g.mode, g.prompt, g.negative_prompt,
 
 PROGRESS_SQL = ("update public.generations set status = %s, progress = %s, "
                 "comfy_prompt_id = %s where id = %s")
+
+# Rough wall-clock targets used to interpolate progress between the coarse
+# stage markers (claimed 10 -> refs 20 -> submitted 40 -> ComfyUI 40..79 ->
+# uploading 80 -> settled 100). Only a UX estimate; 100 always comes from
+# settle_generation.
+EXPECTED_SECONDS = {"image": 60.0, "video": 300.0}
 
 
 def _claim() -> dict | None:
@@ -152,13 +158,24 @@ def _process(job: dict) -> None:
         _set_progress(job_id, "running", 40, comfy_prompt_id=prompt_id)
         log.info("job %s submitted as prompt %s", job_id, prompt_id)
 
-        # 3) wait for completion
+        # 3) wait for completion, interpolating progress 40->79 while the
+        #    engine runs (per-step events would need the ComfyUI websocket;
+        #    wall-clock estimate over the expected duration is good enough
+        #    for a smooth percentage without extra infrastructure)
         deadline = time.monotonic() + get_settings().job_timeout_s
+        expected = EXPECTED_SECONDS.get(job["engine"], 120.0)
+        submitted_at = time.monotonic()
+        last_progress = 40
         entry = None
         while time.monotonic() < deadline:
             entry = client.poll(prompt_id)
             if entry is not None:
                 break
+            share = min(1.0, (time.monotonic() - submitted_at) / expected)
+            p = 40 + int(39 * share)
+            if p != last_progress:
+                _set_progress(job_id, "running", p, comfy_prompt_id=prompt_id)
+                last_progress = p
             time.sleep(client.poll_interval)
         if entry is None:
             raise EngineError("engine timed out")

@@ -15,12 +15,14 @@ from app.core.config import get_settings
 @lru_cache
 def service_client() -> Client:
     s = get_settings()
-    return create_client(s.supabase_url, s.supabase_key)
+    if not s.supabase_service_key:
+        raise RuntimeError("SUPABASE_SERVICE_KEY is not configured")
+    return create_client(s.supabase_url, s.supabase_service_key)
 
 
 def user_client(token: str) -> Client:
     """Client bound to a caller's JWT; respects RLS policies."""
     s = get_settings()
-    client = create_client(s.supabase_url, s.supabase_key)
+    client = create_client(s.supabase_url, s.supabase_anon_key)
     client.postgrest.auth(token)
     return client

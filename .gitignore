@@ -27,3 +27,10 @@ deploy_img.txt
 deploy_vid.txt
 smoke_out.txt
 scripts/.testuser
+
+# Dev server logs and test-run artifacts
+*_out.txt
+*_err.txt
+fe_build.txt
+_pw_shots/
+_tester_session.json
