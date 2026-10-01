@@ -10,3 +10,14 @@ download_log.txt
 download_err.txt
 make_video.log
 make_video.err
+db_push_out.txt
+deploy_config.json
+
+# Frontend
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# Env and local state
+.env
+*.local
