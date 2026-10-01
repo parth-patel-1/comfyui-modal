@@ -21,3 +21,8 @@ frontend/out/
 # Env and local state
 .env
 *.local
+modal_app/deploy_config.json
+modal_app/.engine_token
+deploy_img.txt
+deploy_vid.txt
+smoke_out.txt
