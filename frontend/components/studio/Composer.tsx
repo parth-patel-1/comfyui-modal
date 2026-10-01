@@ -58,12 +58,12 @@ export default function Composer({
     setShowParams(false);
   }, [engine, cfg]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function pickFiles(files: FileList | null) {
-    if (!files?.length) return;
+  async function addFiles(files: File[]) {
+    if (!files.length) return;
     setError(null);
     setUploading(true);
     try {
-      for (const f of Array.from(files)) {
+      for (const f of files) {
         if (refs.length >= maxRefs) {
           setError(`At most ${maxRefs} reference image${maxRefs > 1 ? "s" : ""}.`);
           break;
@@ -75,9 +75,35 @@ export default function Composer({
       setError(e instanceof Error ? e.message : "upload failed");
     } finally {
       setUploading(false);
-      if (fileRef.current) fileRef.current.value = "";
     }
   }
+
+  function pickFiles(files: FileList | null) {
+    if (!files?.length) return;
+    void addFiles(Array.from(files));
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
+  // Pasting a screenshot/image from the clipboard (Ctrl/Cmd+V) attaches it
+  // as a reference. If the current mode does not use references, it
+  // auto-switches (t2i -> edit, t2v -> i2v) so the pasted image is used.
+  useEffect(() => {
+    function onPaste(e: ClipboardEvent) {
+      const imgs = Array.from(e.clipboardData?.items ?? []).filter((i) =>
+        i.type.startsWith("image/"),
+      );
+      if (imgs.length === 0) return; // plain-text pastes behave normally
+      e.preventDefault();
+      const files = imgs
+        .map((i) => i.getAsFile())
+        .filter((f): f is File => f instanceof File);
+      if (!files.length) return;
+      if (!needsRefs(mode)) setMode(engine === "video" ? "i2v" : "edit");
+      void addFiles(files);
+    }
+    document.addEventListener("paste", onPaste);
+    return () => document.removeEventListener("paste", onPaste);
+  }, [engine, mode, maxRefs, refs]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function submit() {
     if (!prompt.trim()) { setError("Describe what you want to create."); return; }
@@ -148,6 +174,10 @@ export default function Composer({
             className="gs-focus h-8 rounded-lg border border-line bg-surface-2 px-2 text-xs text-fg">
             {MODES[engine].map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
           </select>
+
+          <span className="hidden text-[11px] text-muted md:inline">
+            Paste an image (Ctrl+V) to attach it
+          </span>
 
           {needsRefs(mode) && (
             <Button variant="outline" className="h-8 px-2.5 text-xs" disabled={uploading}
