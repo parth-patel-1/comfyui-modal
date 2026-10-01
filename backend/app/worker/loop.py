@@ -1,0 +1,218 @@
+"""Generation worker: claims queued jobs (SKIP LOCKED) and drives them
+through the ComfyUI engines, then settles credits atomically.
+
+Run with: python -m app.worker.loop   (from backend/)
+"""
+
+from __future__ import annotations
+
+import logging
+import sys
+import time
+from pathlib import Path
+
+from app.core.config import get_settings
+from app.core.db import db_conn
+from app.services import storage
+from app.services.engines import EngineClient, EngineError
+
+logging.basicConfig(level=logging.INFO,
+                    format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+log = logging.getLogger("genstudio.worker")
+
+# workflow_factory lives in modal_app/ (pure python, no modal import needed)
+sys.path.insert(0, str(Path(__file__).parents[3] / "modal_app"))
+import workflow_factory as factory  # noqa: E402
+
+
+CLAIM_SQL = """
+with next_job as (
+    select id from public.generations
+    where status = 'queued'
+    order by created_at
+    for update skip locked
+    limit 1
+)
+update public.generations g
+set status = 'provisioning', started_at = now(), gpu_type = coalesce((
+    select case when g.engine = 'image'
+                then ms.image_gpu else ms.video_gpu end
+    from public.modal_settings ms where ms.id = 1
+), '')
+from next_job q
+where g.id = q.id
+returning g.id, g.user_id, g.engine, g.mode, g.prompt, g.negative_prompt,
+          g.params, g.reference_paths, g.credits_charged, g.gpu_type
+"""
+
+PROGRESS_SQL = ("update public.generations set status = %s, progress = %s, "
+                "comfy_prompt_id = %s where id = %s")
+
+
+def _claim() -> dict | None:
+    with db_conn() as conn, conn.cursor() as cur:
+        cur.execute(CLAIM_SQL)
+        row = cur.fetchone()
+        if row is None:
+            conn.rollback()
+            return None
+        cols = [d[0] for d in cur.description]
+        conn.commit()
+    return dict(zip(cols, row))
+
+
+def _set_progress(job_id: str, status: str, progress: int,
+                  comfy_prompt_id: str = "") -> None:
+    with db_conn() as conn, conn.cursor() as cur:
+        cur.execute(PROGRESS_SQL, (status, progress, comfy_prompt_id, job_id))
+        conn.commit()
+
+
+def _engine_url(engine: str) -> str:
+    """Endpoint from modal_settings (runtime-changeable); env fallback."""
+    with db_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            "select image_endpoint, video_endpoint from public.modal_settings where id = 1"
+        )
+        img, vid = cur.fetchone()
+    s = get_settings()
+    return (img if engine == "image" else vid) or (
+        s.image_engine_url if engine == "image" else s.video_engine_url
+    )
+
+
+def _build_workflow(job: dict, ref_names: list[str]) -> dict:
+    p = job["params"] if isinstance(job["params"], dict) else dict(job["params"])
+    seed = int(p.get("seed", int(time.time()) % (2**31)))
+    steps = int(p.get("steps", 25))
+    cfg = float(p.get("cfg", 1.0))
+    mode = job["mode"]
+    if mode == "t2i":
+        return factory.build_image_t2i(
+            job["prompt"], job["negative_prompt"], p["width"], p["height"],
+            seed=seed, steps=steps, cfg=cfg)
+    if mode == "edit":
+        return factory.build_image_edit(
+            job["prompt"], job["negative_prompt"], ref_names,
+            p["width"], p["height"], seed=seed, steps=steps, cfg=cfg)
+    if mode == "t2v":
+        return factory.build_video_t2v(
+            job["prompt"], p["width"], p["height"], int(p.get("duration_s", 5)),
+            seed=seed, steps=steps, turbo=bool(p.get("turbo")))
+    return factory.build_video_i2v(
+        job["prompt"], ref_names[0], ref_names[1] if len(ref_names) > 1 else None,
+        p["width"], p["height"], int(p.get("duration_s", 5)),
+        seed=seed, steps=steps, turbo=bool(p.get("turbo")))
+
+
+def _settle(job_id: str, success: bool, error: str = "", duration_ms=None,
+            outputs=None, cost_compute=None, cost_billed=None) -> None:
+    with db_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            "select public.settle_generation(%s::uuid, %s::boolean, %s::text, "
+            "%s::int, %s::numeric, %s::numeric, %s::text[])",
+            (job_id, success, error, duration_ms,
+             cost_compute, cost_billed, outputs or []),
+        )
+        conn.commit()
+
+
+def _costs(duration_ms: int, gpu_type: str) -> tuple[float | None, float | None]:
+    """(compute_usd, billed_est_usd) from gpu_rates + overhead factor."""
+    with db_conn() as conn, conn.cursor() as cur:
+        cur.execute("select hourly_usd from public.gpu_rates where gpu_type = %s", (gpu_type,))
+        rate = cur.fetchone()
+        cur.execute("select overhead_factor from public.modal_settings where id = 1")
+        factor = cur.fetchone()
+    if not rate:
+        return None, None
+    compute = float(rate[0]) * duration_ms / 3_600_000.0
+    billed = compute * float(factor[0] if factor else 1.25)
+    return round(compute, 6), round(billed, 6)
+
+
+def _process(job: dict) -> None:
+    job_id = str(job["id"])
+    user_id = str(job["user_id"])
+    started = time.monotonic()
+    client = EngineClient(_engine_url(job["engine"]))
+
+    try:
+        # 1) fetch user references from Storage and upload to the engine
+        ref_names: list[str] = []
+        for i, path in enumerate(list(job["reference_paths"]), start=1):
+            data = storage.download("references", path)
+            ext = path.rsplit(".", 1)[-1].lower()
+            ref_names.append(client.upload_image(data, f"gen_{job_id[:8]}_{i}.{ext}"))
+        _set_progress(job_id, "running", 20)
+
+        # 2) build + submit workflow
+        workflow = _build_workflow(job, ref_names)
+        prompt_id = client.submit(workflow)
+        _set_progress(job_id, "running", 40, comfy_prompt_id=prompt_id)
+        log.info("job %s submitted as prompt %s", job_id, prompt_id)
+
+        # 3) wait for completion
+        deadline = time.monotonic() + get_settings().job_timeout_s
+        entry = None
+        while time.monotonic() < deadline:
+            entry = client.poll(prompt_id)
+            if entry is not None:
+                break
+            time.sleep(client.poll_interval)
+        if entry is None:
+            raise EngineError("engine timed out")
+        _set_progress(job_id, "uploading", 80)
+
+        # 4) download outputs and publish to Storage under the user's folder
+        outputs: list[str] = []
+        outputs_node = entry.get("outputs", {})
+        for node_out in outputs_node.values():
+            files = (node_out.get("images") or node_out.get("gifs")
+                     or node_out.get("videos") or [])
+            for f in files:
+                blob = client.download(f)
+                fname = f"{prompt_id}_{len(outputs)}_{f['filename']}"
+                ctype = "video/mp4" if fname.endswith(".mp4") else "image/png"
+                path = f"{user_id}/{job_id}/{fname}"
+                storage.upload("generations", path, blob, ctype)
+                outputs.append(path)
+        if not outputs:
+            raise EngineError("engine produced no output files")
+
+        # 5) settle with costs
+        duration_ms = int((time.monotonic() - started) * 1000)
+        gpu = job.get("gpu_type") or ""
+        compute, billed = _costs(duration_ms, gpu) if gpu else (None, None)
+        _settle(job_id, True, duration_ms=duration_ms, outputs=outputs,
+                cost_compute=compute, cost_billed=billed)
+        log.info("job %s succeeded (%d outputs, %.1fs)", job_id, len(outputs),
+                 duration_ms / 1000)
+
+    except Exception as e:  # noqa: BLE001 -- any failure refunds credits
+        log.exception("job %s failed", job_id)
+        duration_ms = int((time.monotonic() - started) * 1000)
+        try:
+            _settle(job_id, False, error=str(e)[:2000], duration_ms=duration_ms)
+        except Exception:  # noqa: BLE001
+            log.exception("settle failed for %s", job_id)
+
+
+def run_forever() -> None:
+    interval = get_settings().worker_poll_interval_s
+    log.info("worker started (poll %.1fs)", interval)
+    while True:
+        try:
+            job = _claim()
+        except Exception:  # noqa: BLE001
+            log.exception("claim failed")
+            time.sleep(interval)
+            continue
+        if job is None:
+            time.sleep(interval)
+            continue
+        _process(job)
+
+
+if __name__ == "__main__":
+    run_forever()

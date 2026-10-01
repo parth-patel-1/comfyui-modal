@@ -1,8 +1,4 @@
-"""Direct Postgres access for the SKIP LOCKED worker loop.
-
-The queue claim requires `FOR UPDATE SKIP LOCKED`, which is not exposed
-through PostgREST, so the worker uses psycopg directly.
-"""
+"""Direct Postgres access (session pooler) for API + SKIP LOCKED worker."""
 
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -15,20 +11,11 @@ from app.core.config import get_settings
 _pool: ConnectionPool | None = None
 
 
-def _url() -> str:
-    s = get_settings()
-    if s.db_url:
-        return s.db_url
-    raise RuntimeError(
-        "DB_URL not configured: add DB_CONNECT_STRING-style pooler URL to .env as DB_URL"
-    )
-
-
 def get_pool() -> ConnectionPool:
     global _pool
     if _pool is None:
         _pool = ConnectionPool(
-            _url(),
+            get_settings().db_url,
             min_size=1,
             max_size=8,
             open=True,
@@ -39,6 +26,6 @@ def get_pool() -> ConnectionPool:
 
 @contextmanager
 def db_conn() -> Iterator[psycopg.Connection]:
-    pool = get_pool()
-    with pool.connection() as conn:
+    """Pooled connection with autocommit=False; commits on clean exit."""
+    with get_pool().connection() as conn:
         yield conn
