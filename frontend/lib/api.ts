@@ -12,6 +12,7 @@ import type {
   Me,
   ModalSettings,
   PricingRule,
+  SpendingReport,
   StudioConfig,
 } from "./types";
 
@@ -145,6 +146,8 @@ export const adminApi = {
   deploy: (id: string) => request<DeployRun>(`/api/admin/deploy/${id}`),
   audit: (limit = 50, offset = 0) =>
     request<AuditEntry[]>(`/api/admin/audit?limit=${limit}&offset=${offset}`),
+  spending: (days = 30) =>
+    request<SpendingReport>(`/api/admin/spending?days=${days}`),
 };
 
 /** Upload a reference image straight to Storage with the user's own JWT. */

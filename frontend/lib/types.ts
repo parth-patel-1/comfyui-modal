@@ -159,3 +159,57 @@ export interface AuditEntry {
   created_at: string;
   admin_email: string | null;
 }
+
+export interface SpendingTotals {
+  jobs: number;
+  failed_jobs: number;
+  gpu_seconds: number;
+  compute_usd: number;
+  billed_est_usd: number;
+  credits_charged: number;
+}
+
+export interface SpendingGpuRow {
+  gpu: string;
+  jobs: number;
+  gpu_seconds: number;
+  compute_usd: number;
+  billed_usd: number;
+  hourly_usd: number;
+}
+
+export interface SpendingEngineRow {
+  engine: "image" | "video";
+  jobs: number;
+  gpu_seconds: number;
+  compute_usd: number;
+  billed_usd: number;
+}
+
+export interface SpendingUserRow {
+  user_id: string;
+  email: string;
+  display_name: string;
+  jobs: number;
+  gpu_seconds: number;
+  compute_usd: number;
+  billed_usd: number;
+  credits_charged: number;
+}
+
+export interface SpendingDayRow {
+  day: string;
+  jobs: number;
+  gpu_seconds: number;
+  compute_usd: number;
+  billed_usd: number;
+}
+
+export interface SpendingReport {
+  days: number;
+  totals: SpendingTotals;
+  by_gpu: SpendingGpuRow[];
+  by_engine: SpendingEngineRow[];
+  by_user: SpendingUserRow[];
+  by_day: SpendingDayRow[];
+}

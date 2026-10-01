@@ -53,6 +53,16 @@ def _rows_as_dicts(cur: psycopg.Cursor) -> list[dict]:
     return [dict(zip(cols, r)) for r in cur.fetchall()]
 
 
+NUMERIC_FIELDS = {"gpu_seconds", "compute_usd", "billed_usd", "hourly_usd",
+                  "credits_charged"}
+
+
+def _as_floats(rows: list[dict]) -> list[dict]:
+    """psycopg returns numeric as Decimal; emit plain floats for JSON."""
+    return [{**r, **{k: float(r[k]) for k in NUMERIC_FIELDS & r.keys()}}
+            for r in rows]
+
+
 # --------------------------------------------------------------------- overview
 
 @router.get("/overview")
@@ -103,6 +113,107 @@ def overview(admin: AdminDep) -> dict:
         "maintenance_mode": maintenance,
         "site_name": site,
         "last_deploy": last[0] if last else None,
+    }
+
+
+# --------------------------------------------------------------------- spending
+
+# Cost columns (cost_compute_usd / cost_billed_est_usd) are only written when a
+# job settles successfully, so money aggregates run over succeeded generations.
+@router.get("/spending")
+def spending(
+    admin: AdminDep,
+    days: int = Query(30, ge=0, le=3650, description="0 = all time"),
+) -> dict:
+    where = "where g.status = 'succeeded'"
+    params_all: list = []
+    if days > 0:
+        where += " and g.created_at >= now() - make_interval(days => %s)"
+        params_all.append(days)
+
+    with db_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            "select count(*), "
+            "coalesce(sum(g.duration_ms), 0) / 1000.0, "
+            "coalesce(sum(g.cost_compute_usd), 0), "
+            "coalesce(sum(g.cost_billed_est_usd), 0), "
+            "coalesce(sum(g.credits_charged), 0) "
+            f"from public.generations g {where}",
+            params_all,
+        )
+        (jobs, gpu_s, compute, billed, credits) = cur.fetchone()
+
+        cur.execute(
+            "select count(*) from public.generations g "
+            "where g.status = 'failed'"
+            + (" and g.created_at >= now() - make_interval(days => %s)" if days > 0 else ""),
+            params_all,
+        )
+        failed = cur.fetchone()[0]
+
+        cur.execute(
+            "select coalesce(nullif(g.gpu_type, ''), 'unknown') as gpu, "
+            "count(*) as jobs, "
+            "coalesce(sum(g.duration_ms), 0) / 1000.0 as gpu_seconds, "
+            "coalesce(sum(g.cost_compute_usd), 0) as compute_usd, "
+            "coalesce(sum(g.cost_billed_est_usd), 0) as billed_usd, "
+            "coalesce(max(r.hourly_usd), 0) as hourly_usd "
+            f"from public.generations g "
+            "left join public.gpu_rates r on r.gpu_type = g.gpu_type "
+            f"{where} group by 1 order by compute_usd desc",
+            params_all,
+        )
+        by_gpu = _as_floats(_rows_as_dicts(cur))
+
+        cur.execute(
+            "select g.engine, count(*) as jobs, "
+            "coalesce(sum(g.duration_ms), 0) / 1000.0 as gpu_seconds, "
+            "coalesce(sum(g.cost_compute_usd), 0) as compute_usd, "
+            "coalesce(sum(g.cost_billed_est_usd), 0) as billed_usd "
+            f"from public.generations g {where} group by 1 order by compute_usd desc",
+            params_all,
+        )
+        by_engine = _as_floats(_rows_as_dicts(cur))
+
+        cur.execute(
+            "select p.id as user_id, p.email, p.display_name, count(*) as jobs, "
+            "coalesce(sum(g.duration_ms), 0) / 1000.0 as gpu_seconds, "
+            "coalesce(sum(g.cost_compute_usd), 0) as compute_usd, "
+            "coalesce(sum(g.cost_billed_est_usd), 0) as billed_usd, "
+            "coalesce(sum(g.credits_charged), 0) as credits_charged "
+            "from public.generations g join public.profiles p on p.id = g.user_id "
+            f"{where} group by 1, 2, 3 order by compute_usd desc limit 100",
+            params_all,
+        )
+        by_user = _as_floats(_rows_as_dicts(cur))
+
+        day_where = where
+        cur.execute(
+            "select date_trunc('day', g.created_at)::date as day, "
+            "count(*) as jobs, "
+            "coalesce(sum(g.duration_ms), 0) / 1000.0 as gpu_seconds, "
+            "coalesce(sum(g.cost_compute_usd), 0) as compute_usd, "
+            "coalesce(sum(g.cost_billed_est_usd), 0) as billed_usd "
+            f"from public.generations g {day_where} "
+            "group by 1 order by 1 desc limit 120",
+            params_all,
+        )
+        by_day = _as_floats(_rows_as_dicts(cur))
+
+    return {
+        "days": days,
+        "totals": {
+            "jobs": jobs,
+            "failed_jobs": failed,
+            "gpu_seconds": float(gpu_s),
+            "compute_usd": float(compute),
+            "billed_est_usd": float(billed),
+            "credits_charged": float(credits),
+        },
+        "by_gpu": by_gpu,
+        "by_engine": by_engine,
+        "by_user": by_user,
+        "by_day": by_day,
     }
 
 

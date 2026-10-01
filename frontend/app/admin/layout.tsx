@@ -9,6 +9,7 @@ import { Spinner } from "@/components/ui";
 const TABS = [
   { href: "/admin", label: "Overview", exact: true },
   { href: "/admin/users", label: "Users" },
+  { href: "/admin/spending", label: "Spending" },
   { href: "/admin/settings", label: "Settings & Pricing" },
   { href: "/admin/engines", label: "Engines & GPU" },
   { href: "/admin/audit", label: "Audit log" },
