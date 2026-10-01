@@ -668,6 +668,46 @@ def deploy_detail(run_id: uuid.UUID, admin: AdminDep) -> dict:
     return rows[0]
 
 
+# ---------------------------------------------------------------------- history
+
+@router.get("/history")
+def generation_history(
+    admin: AdminDep,
+    q: str = Query("", description="search prompt, user email or name"),
+    user_id: str = Query("", description="filter to one user"),
+    status: str = Query("", description="queued|running|succeeded|failed|canceled"),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> list[dict]:
+    """Every generation with its owner, prompt, credits and outputs — full
+    visibility of who generated what, when, and for how many credits."""
+    where: list[str] = []
+    params: list = []
+    if q:
+        where.append(
+            "(g.prompt ilike %s or p.email ilike %s or p.display_name ilike %s)")
+        like = f"%{q}%"
+        params += [like, like, like]
+    if user_id:
+        where.append("g.user_id = %s")
+        params.append(user_id)
+    if status:
+        where.append("g.status = %s")
+        params.append(status)
+    clause = f"where {' and '.join(where)}" if where else ""
+    params += [limit, offset]
+    with db_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            "select g.id, g.user_id, p.email, p.display_name, g.engine, g.mode, "
+            "g.status, g.prompt, g.credits_charged, g.output_paths, g.error, "
+            "g.created_at, g.finished_at "
+            f"from public.generations g join public.profiles p on p.id = g.user_id "
+            f"{clause} order by g.created_at desc limit %s offset %s",
+            params,
+        )
+        return _rows_as_dicts(cur)
+
+
 # ------------------------------------------------------------------------ audit
 
 @router.get("/audit")

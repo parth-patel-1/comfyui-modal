@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api, signedUrl } from "@/lib/api";
+import { api, downloadGeneration, signedUrl } from "@/lib/api";
 import type { Generation } from "@/lib/types";
-import { Badge, Spinner } from "@/components/ui";
+import { Badge, Button, Spinner } from "@/components/ui";
 
 export default function GalleryPage() {
   const [items, setItems] = useState<Generation[] | null>(null);
@@ -71,6 +71,7 @@ function GalleryCard({
   onOpen: (v: { url: string; prompt: string }) => void;
 }) {
   const [url, setUrl] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   useEffect(() => {
     signedUrl("generations", gen.output_paths[0]).then(setUrl);
   }, [gen.output_paths]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -95,9 +96,23 @@ function GalleryCard({
       </div>
       <div className="absolute inset-x-0 bottom-0 translate-y-2 bg-gradient-to-t from-black/85 to-transparent p-3 opacity-0 transition-all group-hover:translate-y-0 group-hover:opacity-100">
         <p className="line-clamp-2 text-[11px] leading-snug text-white">{gen.prompt}</p>
-        <div className="mt-1.5 flex gap-1.5">
+        <div className="mt-1.5 flex items-center gap-1.5">
           <Badge tone="accent">{gen.engine === "video" ? "Video" : "Image"}</Badge>
           <Badge>{gen.mode}</Badge>
+          <Button
+            variant="outline"
+            className="ml-auto h-7 bg-surface/90 px-2 text-[11px] text-white"
+            disabled={busy}
+            title={`Saves as genstudio_${gen.id}_0.${gen.engine === "video" ? "mp4" : "png"}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              setBusy(true);
+              downloadGeneration(gen.id, 0, gen.engine === "video" ? "mp4" : "png")
+                .finally(() => setBusy(false));
+            }}
+          >
+            {busy ? <Spinner className="h-3 w-3" /> : null} Download
+          </Button>
         </div>
       </div>
     </button>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { signedUrl } from "@/lib/api";
+import { downloadGeneration, signedUrl } from "@/lib/api";
 import type { Generation } from "@/lib/types";
 import { Badge, Button, Spinner } from "@/components/ui";
 
@@ -49,17 +49,42 @@ function RefThumb({ path }: { path: string }) {
 
 function Media({ gen }: { gen: Generation }) {
   const urls = useSigned(gen.output_paths, "generations");
+  const [busy, setBusy] = useState<number | null>(null);
   if (!gen.output_paths.length) return null;
+
+  async function save(i: number, path: string) {
+    setBusy(i);
+    try {
+      await downloadGeneration(gen.id, i, path.endsWith(".mp4") ? "mp4" : "png");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   return (
     <div className={`grid gap-2 ${gen.output_paths.length > 1 ? "sm:grid-cols-2" : ""}`}>
-      {gen.output_paths.map((p) => {
+      {gen.output_paths.map((p, i) => {
         const url = urls[p];
         if (!url) return <div key={p} className="aspect-square rounded-lg bg-surface-2 animate-pulse" />;
-        return gen.engine === "video" ? (
-          <video key={p} src={url} controls playsInline className="w-full rounded-lg border border-line" />
-        ) : (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img key={p} src={url} alt={gen.prompt.slice(0, 80)} className="w-full rounded-lg border border-line" />
+        return (
+          <div key={p} className="group relative">
+            {gen.engine === "video" ? (
+              <video src={url} controls playsInline className="w-full rounded-lg border border-line" />
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={url} alt={gen.prompt.slice(0, 80)} className="w-full rounded-lg border border-line" />
+            )}
+            <Button
+              variant="outline"
+              className="absolute right-2 top-2 h-8 bg-surface/90 px-2.5 text-xs opacity-90 shadow-sm backdrop-blur transition-opacity hover:opacity-100 focus-visible:opacity-100"
+              disabled={busy !== null}
+              title={`Saves as genstudio_${gen.id}_${i}.${p.endsWith(".mp4") ? "mp4" : "png"}`}
+              onClick={() => void save(i, p)}
+            >
+              {busy === i ? <Spinner className="h-3.5 w-3.5" /> : null}
+              {gen.engine === "video" ? "Download MP4" : "Download PNG"}
+            </Button>
+          </div>
         );
       })}
     </div>

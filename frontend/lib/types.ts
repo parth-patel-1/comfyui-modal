@@ -160,6 +160,22 @@ export interface AuditEntry {
   admin_email: string | null;
 }
 
+export interface AdminHistoryRow {
+  id: string;
+  user_id: string;
+  email: string;
+  display_name: string;
+  engine: Engine;
+  mode: Mode;
+  status: Status;
+  prompt: string;
+  credits_charged: number;
+  output_paths: string[];
+  error: string | null;
+  created_at: string;
+  finished_at: string | null;
+}
+
 export interface SpendingTotals {
   jobs: number;
   failed_jobs: number;

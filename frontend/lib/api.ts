@@ -2,6 +2,7 @@
 
 import { supabase } from "./supabase";
 import type {
+  AdminHistoryRow,
   AdminOverview,
   AdminSettings,
   AdminUser,
@@ -155,6 +156,11 @@ export const adminApi = {
   deploy: (id: string) => request<DeployRun>(`/api/admin/deploy/${id}`),
   audit: (limit = 50, offset = 0) =>
     request<AuditEntry[]>(`/api/admin/audit?limit=${limit}&offset=${offset}`),
+  history: (q = "", userId = "", status = "", limit = 50, offset = 0) =>
+    request<AdminHistoryRow[]>(
+      `/api/admin/history?q=${encodeURIComponent(q)}&user_id=${encodeURIComponent(userId)}` +
+      `&status=${encodeURIComponent(status)}&limit=${limit}&offset=${offset}`,
+    ),
   spending: (days = 30) =>
     request<SpendingReport>(`/api/admin/spending?days=${days}`),
   templates: () => request<PromptTemplate[]>("/api/admin/templates"),
@@ -195,4 +201,46 @@ export async function signedUrl(
     .from(bucket)
     .createSignedUrl(path, 60 * 60);
   return data?.signedUrl ?? null;
+}
+
+/* ------------------------------------------------------------------ media */
+
+/** Unique, server-traceable download name for a generation output. */
+export function generationFileName(id: string, n: number, ext: string): string {
+  return `genstudio_${id}_${n}.${ext}`;
+}
+
+/** Authenticated fetch of one generation output as a blob (owner or admin). */
+export async function fetchGenerationBlob(
+  id: string,
+  n = 0,
+): Promise<{ blob: Blob; type: string }> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  const resp = await fetch(`${API_URL}/api/generations/${id}/download?n=${n}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!resp.ok) throw new ApiError(resp.status, "failed to load media");
+  return {
+    blob: await resp.blob(),
+    type: resp.headers.get("content-type") ?? "",
+  };
+}
+
+/** Download a generation output (image PNG / video MP4) under its unique
+ *  server-traceable name: genstudio_<generation_id>_<index>.<ext>. */
+export async function downloadGeneration(
+  id: string,
+  n = 0,
+  ext = "png",
+): Promise<void> {
+  const { blob } = await fetchGenerationBlob(id, n);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = generationFileName(id, n, ext);
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }

@@ -6,11 +6,12 @@ import json
 import uuid
 
 import psycopg
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Response
 
 from app.core.db import db_conn
 from app.dependencies import UserDep
 from app.schemas.models import GenerationCreate, GenerationOut, UploadTicket, WalletOut
+from app.services import storage
 
 router = APIRouter(prefix="/api", tags=["generations"])
 
@@ -175,6 +176,70 @@ def get_generation(generation_id: uuid.UUID, user: UserDep) -> dict:
     if str(gen.pop("user_id")) != user.id and user.role != "admin":
         raise HTTPException(404, "generation not found")
     return gen
+
+
+_CONTENT_TYPES = {
+    "png": "image/png",
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "webp": "image/webp",
+    "mp4": "video/mp4",
+    "webm": "video/webm",
+    "gif": "image/gif",
+}
+
+
+def _download_filename(generation_id: uuid.UUID, n: int, path: str) -> str:
+    """Unique, traceable download name: genstudio_<generation_id>_<index>.<ext>.
+
+    The generation id maps 1:1 to the public.generations row, which records the
+    owner and the exact storage paths (generations bucket), so any downloaded
+    file can always be located on the server.
+    """
+    ext = path.rsplit(".", 1)[-1].lower() if "." in path else "png"
+    return f"genstudio_{generation_id}_{n}.{ext}"
+
+
+@router.get("/generations/{generation_id}/download")
+def download_output(
+    generation_id: uuid.UUID,
+    user: UserDep,
+    n: int = Query(0, ge=0, description="index of the output file"),
+    dl: bool = Query(False, description="true = force download, false = inline"),
+) -> Response:
+    """Stream one output of a generation. Owner or admin only.
+
+    With dl=1 the browser saves the file under its unique server-side name
+    (genstudio_<generation_id>_<n>.<ext>) instead of displaying it inline.
+    """
+    with db_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            "select user_id, output_paths from public.generations where id = %s",
+            (generation_id,),
+        )
+        row = cur.fetchone()
+    if row is None:
+        raise HTTPException(404, "generation not found")
+    if str(row[0]) != user.id and user.role != "admin":
+        raise HTTPException(404, "generation not found")
+    paths = row[1] or []
+    if n >= len(paths):
+        raise HTTPException(404, "output not found")
+    path = paths[n]
+    ext = path.rsplit(".", 1)[-1].lower() if "." in path else "png"
+    try:
+        blob = storage.download("generations", path)
+    except storage.StorageError as e:
+        raise HTTPException(502, str(e)) from e
+    headers = {"Cache-Control": "private, max-age=600"}
+    if dl:
+        name = _download_filename(generation_id, n, path)
+        headers["Content-Disposition"] = f'attachment; filename="{name}"'
+    return Response(
+        content=blob,
+        media_type=_CONTENT_TYPES.get(ext, "application/octet-stream"),
+        headers=headers,
+    )
 
 
 @router.post("/generations/{generation_id}/cancel")
