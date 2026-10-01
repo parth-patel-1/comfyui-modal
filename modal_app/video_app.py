@@ -21,7 +21,9 @@ from common import (
 from comfy_proxy import ComfyProxy
 
 config = load_engine_config("video")
-image = build_image(config["comfyui_version"])
+image = build_image(config["comfyui_version"]).add_local_python_source(
+    "common", "comfy_proxy"
+)
 
 app = modal.App("genstudio-video")
 

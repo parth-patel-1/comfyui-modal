@@ -33,9 +33,17 @@ def main() -> None:
     assert r.status_code == 200, r.text[:300]
 
     # 4) verify MiniMaxH3ImageToVideo i2v input names on the video engine
+    import time
+
     print("probing video engine (cold start possible)...")
-    rv = requests.get(f"{video_url}/api/object_info/MiniMaxH3ImageToVideo",
-                      headers=hdr, timeout=TIMEOUT)
+    rv = None
+    for _ in range(60):  # up to ~10 min for cold start
+        rv = requests.get(f"{video_url}/api/object_info/MiniMaxH3ImageToVideo",
+                          headers=hdr, timeout=TIMEOUT)
+        if rv.status_code == 200:
+            break
+        print("  video engine not ready:", rv.status_code, rv.text[:60])
+        time.sleep(10)
     print("video node info:", rv.status_code)
     assert rv.status_code == 200, rv.text[:300]
     node = rv.json()["MiniMaxH3ImageToVideo"]
@@ -56,7 +64,6 @@ def main() -> None:
     prompt_id = rp.json()["prompt_id"]
     print("prompt_id:", prompt_id)
 
-    import time
     for _ in range(180):  # up to ~15 min
         time.sleep(5)
         rh = requests.get(f"{image_url}/history/{prompt_id}", headers=hdr, timeout=TIMEOUT)
