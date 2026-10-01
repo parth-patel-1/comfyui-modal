@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { uploadReference } from "@/lib/api";
-import type { Engine, Mode, StudioConfig } from "@/lib/types";
+import type { Engine, Mode, PromptTemplate, StudioConfig } from "@/lib/types";
 import { Badge, Button, ErrorText, Spinner, Textarea } from "@/components/ui";
 import ParamsPanel, { initParams, type Params } from "./ParamsPanel";
 
@@ -19,6 +19,13 @@ const MODES: Record<Engine, { value: Mode; label: string }[]> = {
 
 const needsRefs = (m: Mode) => m === "edit" || m === "i2v";
 
+/** Replace {key} tokens with the user's values (unknown keys are left intact). */
+function interpolate(s: string, vals: Record<string, string>): string {
+  return s.replace(/\{(\w+)\}/g, (_, k: string) =>
+    vals[k] !== undefined && vals[k] !== "" ? vals[k] : `{${k}}`,
+  );
+}
+
 export interface SubmitPayload {
   engine: Engine;
   mode: Mode;
@@ -29,7 +36,7 @@ export interface SubmitPayload {
 }
 
 export default function Composer({
-  cfg, engine, setEngine, mode, setMode, estimate, disabled, onSubmit,
+  cfg, engine, setEngine, mode, setMode, estimate, disabled, template, onSubmit,
 }: {
   cfg: StudioConfig;
   engine: Engine;
@@ -38,10 +45,12 @@ export default function Composer({
   setMode: (m: Mode) => void;
   estimate: number | null;
   disabled: boolean;
+  template?: PromptTemplate | null;
   onSubmit: (p: SubmitPayload) => Promise<string | null>;
 }) {
   const [prompt, setPrompt] = useState("");
   const [negative, setNegative] = useState("");
+  const [phValues, setPhValues] = useState<Record<string, string>>({});
   const [refs, setRefs] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -57,6 +66,26 @@ export default function Composer({
     setParams(initParams(engine, cfg.engines[engine]));
     setShowParams(false);
   }, [engine, cfg]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Template picked on the Discover page: prefill prompt (placeholders filled
+  // with their example values), negative prompt, and engine/mode.
+  useEffect(() => {
+    if (!template) return;
+    const vals: Record<string, string> = {};
+    for (const p of template.placeholders) vals[p.key] = p.example;
+    setPhValues(vals);
+    setPrompt(interpolate(template.prompt, vals));
+    setNegative(template.negative_prompt);
+    setEngine(template.engine);
+    setMode(template.mode);
+  }, [template]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function setPh(key: string, value: string) {
+    if (!template) return;
+    const vals = { ...phValues, [key]: value };
+    setPhValues(vals);
+    setPrompt(interpolate(template.prompt, vals));
+  }
 
   async function addFiles(files: File[]) {
     if (!files.length) return;
@@ -141,6 +170,34 @@ export default function Composer({
                   className="gs-focus rounded-full hover:text-fg" aria-hidden="true">x</button>
               </span>
             ))}
+          </div>
+        )}
+
+        {template && template.placeholders.length > 0 && (
+          <div className="rounded-lg border border-accent-line bg-accent-soft p-2.5 space-y-2">
+            <div className="flex items-center gap-2">
+              <Badge tone="accent">{template.title}</Badge>
+              <span className="text-[11px] text-muted">fill in the blanks</span>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {template.placeholders.map((p) => (
+                <label key={p.key} className="flex items-center gap-2 text-xs">
+                  <span className="w-24 shrink-0 truncate text-muted" title={p.label}>{p.label}</span>
+                  <input
+                    value={phValues[p.key] ?? ""}
+                    onChange={(e) => setPh(p.key, e.target.value)}
+                    aria-label={p.label}
+                    className="gs-focus h-8 w-full rounded-lg border border-line bg-surface-2 px-2 text-xs text-fg"
+                  />
+                </label>
+              ))}
+            </div>
+            {needsRefs(template.mode) && (
+              <p className="text-[11px] text-muted">
+                This template works on a reference image — upload your own photo below (the
+                Discover card shows an example only).
+              </p>
+            )}
           </div>
         )}
 

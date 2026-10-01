@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
-from app.routers import admin, config, generations
+from app.routers import admin, config, generations, templates
 
 app = FastAPI(title="GenStudio API", version="0.3.0")
 
@@ -21,6 +21,7 @@ app.add_middleware(
 
 app.include_router(generations.router)
 app.include_router(config.router)
+app.include_router(templates.router)
 app.include_router(admin.router)
 
 

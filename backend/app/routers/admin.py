@@ -27,6 +27,7 @@ from app.schemas.models import (
     AppSettingsUpdate,
     ModalSettingsUpdate,
     PricingUpdate,
+    TemplateBody,
 )
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -683,3 +684,84 @@ def audit_log(
             "order by a.created_at desc limit %s offset %s", (limit, offset),
         )
         return _rows_as_dicts(cur)
+
+
+# ------------------------------------------------------------------- templates
+
+_TEMPLATE_COLS = ("id, title, category, engine, mode, prompt, negative_prompt, "
+                  "placeholders, example_image_path, active, sort_order, created_at")
+
+
+def _template_rows(cur: psycopg.Cursor) -> list[dict]:
+    rows = _rows_as_dicts(cur)
+    for t in rows:
+        if t.get("placeholders") is not None and not isinstance(t["placeholders"], list):
+            t["placeholders"] = json.loads(t["placeholders"])
+    return rows
+
+
+@router.get("/templates")
+def admin_list_templates(admin: AdminDep) -> list[dict]:
+    """All templates including inactive ones, for the admin manager."""
+    with db_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            f"select {_TEMPLATE_COLS} from public.prompt_templates "
+            "order by sort_order, created_at"
+        )
+        return _template_rows(cur)
+
+
+@router.post("/templates")
+def admin_create_template(admin: AdminDep, body: TemplateBody) -> dict:
+    with db_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            "insert into public.prompt_templates "
+            "(title, category, engine, mode, prompt, negative_prompt, "
+            " placeholders, example_image_path, active, sort_order) "
+            "values (%s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s) "
+            f"returning {_TEMPLATE_COLS}",
+            (body.title, body.category, body.engine, body.mode, body.prompt,
+             body.negative_prompt, json.dumps([p.model_dump() for p in body.placeholders]),
+             body.example_image_path, body.active, body.sort_order),
+        )
+        row = _template_rows(cur)[0]
+        _audit(conn, admin.id, "template.create", target=str(row["id"]),
+               payload={"title": body.title})
+    return row
+
+
+@router.put("/templates/{template_id}")
+def admin_update_template(template_id: str, admin: AdminDep,
+                          body: TemplateBody) -> dict:
+    with db_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            "update public.prompt_templates set title = %s, category = %s, "
+            "engine = %s, mode = %s, prompt = %s, negative_prompt = %s, "
+            "placeholders = %s::jsonb, example_image_path = %s, active = %s, "
+            "sort_order = %s where id = %s "
+            f"returning {_TEMPLATE_COLS}",
+            (body.title, body.category, body.engine, body.mode, body.prompt,
+             body.negative_prompt, json.dumps([p.model_dump() for p in body.placeholders]),
+             body.example_image_path, body.active, body.sort_order, template_id),
+        )
+        if cur.rowcount == 0:
+            raise HTTPException(404, "template not found")
+        row = _template_rows(cur)[0]
+        _audit(conn, admin.id, "template.update", target=template_id,
+               payload={"title": body.title})
+    return row
+
+
+@router.delete("/templates/{template_id}")
+def admin_delete_template(template_id: str, admin: AdminDep) -> dict:
+    with db_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            "delete from public.prompt_templates where id = %s returning title",
+            (template_id,),
+        )
+        row = cur.fetchone()
+        if row is None:
+            raise HTTPException(404, "template not found")
+        _audit(conn, admin.id, "template.delete", target=template_id,
+               payload={"title": row[0]})
+    return {"deleted": template_id, "title": row[0]}

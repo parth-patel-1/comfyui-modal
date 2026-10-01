@@ -12,8 +12,10 @@ import type {
   Me,
   ModalSettings,
   PricingRule,
+  PromptTemplate,
   SpendingReport,
   StudioConfig,
+  TemplateBody,
 } from "./types";
 
 export const API_URL =
@@ -80,6 +82,13 @@ export const api = {
       { method: "POST" },
     ),
   me: () => request<Me>("/api/me"),
+  templates: () => request<PromptTemplate[]>("/api/templates"),
+  template: (id: string) =>
+    request<PromptTemplate[]>(`/api/templates`).then(
+      (list) => list.find((t) => t.id === id) ?? null,
+    ),
+  /** URL of the template's example image (proxied by the backend). */
+  templateImageUrl: (id: string) => `${API_URL}/api/templates/${id}/image`,
 };
 
 export const adminApi = {
@@ -148,6 +157,21 @@ export const adminApi = {
     request<AuditEntry[]>(`/api/admin/audit?limit=${limit}&offset=${offset}`),
   spending: (days = 30) =>
     request<SpendingReport>(`/api/admin/spending?days=${days}`),
+  templates: () => request<PromptTemplate[]>("/api/admin/templates"),
+  createTemplate: (body: TemplateBody) =>
+    request<PromptTemplate>("/api/admin/templates", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  updateTemplate: (id: string, body: TemplateBody) =>
+    request<PromptTemplate>(`/api/admin/templates/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+  deleteTemplate: (id: string) =>
+    request<{ deleted: string }>(`/api/admin/templates/${id}`, {
+      method: "DELETE",
+    }),
 };
 
 /** Upload a reference image straight to Storage with the user's own JWT. */

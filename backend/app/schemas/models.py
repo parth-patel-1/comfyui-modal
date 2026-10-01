@@ -47,6 +47,28 @@ class WalletOut(BaseModel):
     balance: int
 
 
+# ------------------------------------------------------------------ templates
+
+class TemplatePlaceholder(BaseModel):
+    key: str = Field(min_length=1, max_length=40, pattern="^[a-z0-9_]+$")
+    label: str = Field(min_length=1, max_length=80)
+    example: str = Field("", max_length=200)
+
+
+class TemplateBody(BaseModel):
+    title: str = Field(min_length=1, max_length=120)
+    category: str = Field("general", max_length=40)
+    engine: str = Field("image", pattern="^(image|video)$")
+    mode: str = Field("t2i", pattern="^(t2i|edit|t2v|i2v)$")
+    prompt: str = Field(min_length=1, max_length=4000)
+    negative_prompt: str = Field("", max_length=2000)
+    placeholders: list[TemplatePlaceholder] = []
+    example_image_path: str | None = Field(None, max_length=400)
+    active: bool = True
+    sort_order: int = Field(0, ge=0, le=10000)
+
+
+
 class StudioConfig(BaseModel):
     site_name: str
     maintenance_mode: bool

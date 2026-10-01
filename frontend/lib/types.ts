@@ -213,3 +213,39 @@ export interface SpendingReport {
   by_user: SpendingUserRow[];
   by_day: SpendingDayRow[];
 }
+
+/* -------------------------------------------------------------- templates */
+
+export interface TemplatePlaceholder {
+  key: string;
+  label: string;
+  example: string;
+}
+
+export interface PromptTemplate {
+  id: string;
+  title: string;
+  category: string;
+  engine: Engine;
+  mode: Mode;
+  prompt: string;
+  negative_prompt: string;
+  placeholders: TemplatePlaceholder[];
+  example_image_path: string | null;
+  active: boolean;
+  sort_order: number;
+  created_at: string;
+}
+
+export interface TemplateBody {
+  title: string;
+  category: string;
+  engine: Engine;
+  mode: Mode;
+  prompt: string;
+  negative_prompt: string;
+  placeholders: TemplatePlaceholder[];
+  example_image_path: string | null;
+  active: boolean;
+  sort_order: number;
+}

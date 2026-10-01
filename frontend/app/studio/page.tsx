@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
-import type { Engine, Generation, Mode, StudioConfig } from "@/lib/types";
+import type { Engine, Generation, Mode, PromptTemplate, StudioConfig } from "@/lib/types";
 import Composer, { type SubmitPayload } from "@/components/studio/Composer";
 import { PromptBubble, ResultCard } from "@/components/studio/Thread";
 import { Spinner } from "@/components/ui";
@@ -17,10 +18,23 @@ interface Turn {
 }
 
 export default function StudioPage() {
+  return (
+    <Suspense
+      fallback={<div className="grid place-items-center py-32"><Spinner className="h-6 w-6 text-accent" /></div>}
+    >
+      <StudioInner />
+    </Suspense>
+  );
+}
+
+function StudioInner() {
+  const searchParams = useSearchParams();
+  const templateId = searchParams.get("template");
   const [cfg, setCfg] = useState<StudioConfig | null>(null);
   const [cfgError, setCfgError] = useState<string | null>(null);
   const [engine, setEngine] = useState<Engine>("image");
   const [mode, setMode] = useState<Mode>("t2i");
+  const [template, setTemplate] = useState<PromptTemplate | null>(null);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [estimate, setEstimate] = useState<number | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -31,6 +45,16 @@ export default function StudioPage() {
   useEffect(() => {
     api.studioConfig().then(setCfg).catch((e) => setCfgError(e.message));
   }, []);
+
+  // "Use in Studio" from the Discover page (?template=<id>): fetch it once.
+  useEffect(() => {
+    if (!templateId) return;
+    setTemplate(null);
+    api
+      .template(templateId)
+      .then(setTemplate)
+      .catch(() => setTemplate(null)); // bad/stale link — studio stays usable
+  }, [templateId]);
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [turns.length]);
 
@@ -164,6 +188,7 @@ export default function StudioPage() {
         engine={engine} setEngine={setEngine}
         mode={mode} setMode={setMode}
         estimate={estimate}
+        template={template}
         disabled={turns.some((t) => !TERMINAL.has(t.gen.status))}
         onSubmit={submit}
       />

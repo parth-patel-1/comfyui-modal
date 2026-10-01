@@ -28,6 +28,7 @@ export function Logo({ size = "md" }: { size?: "md" | "lg" }) {
 
 const LINKS = [
   { href: "/studio", label: "Studio" },
+  { href: "/discover", label: "Discover" },
   { href: "/gallery", label: "Gallery" },
   { href: "/credits", label: "Credits" },
 ];
