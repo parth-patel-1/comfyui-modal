@@ -53,6 +53,13 @@ class EngineClient:
                     if waited:
                         log.info("engine %s is warm", self.base_url)
                     return
+                if resp.status_code == 404:
+                    # the app/label does not exist at all -- no cold start
+                    # will ever fix this; fail fast with an actionable error
+                    raise EngineError(
+                        f"engine {self.base_url} not found (404) -- the Modal "
+                        "app is not deployed; deploy it and update the "
+                        "endpoint URL")
             except httpx.HTTPError:
                 pass  # connection errors count as "still cold"
             if time.monotonic() >= deadline:
