@@ -144,6 +144,10 @@ def _process(job: dict) -> None:
     client = EngineClient(_engine_url(job["engine"]))
 
     try:
+        # 0) wake the engine if it is cold (scaled to zero on Modal) --
+        #    blocks up to cold_start_wait_s instead of failing the job
+        client.wait_ready()
+
         # 1) fetch user references from Storage and upload to the engine
         ref_names: list[str] = []
         for i, path in enumerate(list(job["reference_paths"]), start=1):

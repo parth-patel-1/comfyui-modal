@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     # Worker
     worker_poll_interval_s: float = 2.0
     job_timeout_s: int = 1200
+    cold_start_wait_s: float = 900.0  # max time to wait for a cold Modal engine
 
     # ComfyUI engines (Modal URLs; also stored in modal_settings table)
     image_engine_url: str = ""
