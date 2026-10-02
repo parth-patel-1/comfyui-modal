@@ -10,7 +10,7 @@ const ACTIVE: string[] = ["queued", "provisioning", "running", "uploading"];
 // Rough wall-clock targets per engine — must mirror EXPECTED_SECONDS in
 // backend/app/worker/loop.py. Used to smooth the percentage between the
 // coarse progress values the worker writes.
-const EXPECTED_S: Record<string, number> = { image: 60, video: 300 };
+const EXPECTED_S: Record<string, number> = { image: 60, video: 2100 };
 
 const STATUS_LABEL: Record<string, string> = {
   queued: "Queued",
@@ -158,7 +158,17 @@ export function ResultCard({ gen, onCancel, onRetry }: {
               style={!indeterminate ? { width: `${Math.max(6, shown)}%` } : undefined}
             />
           </div>
-          <p className="mt-1.5 text-[11px] text-faint">{STATUS_LABEL[gen.status]}…</p>
+          {gen.engine === "video" && gen.status !== "queued" ? (
+            <p className="mt-1.5 text-xs text-faint">
+              {gen.status === "provisioning"
+                ? "Waking the GPU — this can take a few minutes…"
+                : `About ${Math.max(1, Math.ceil((EXPECTED_S.video - elapsedS) / 60))} min left. `
+                  + "Video generation takes roughly 25–35 minutes — you can leave this page; "
+                  + "it keeps processing in the background and results are saved to your library."}
+            </p>
+          ) : (
+            <p className="mt-1.5 text-[11px] text-faint">{STATUS_LABEL[gen.status]}…</p>
+          )}
         </div>
       )}
 

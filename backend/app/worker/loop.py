@@ -52,7 +52,7 @@ PROGRESS_SQL = ("update public.generations set status = %s, progress = %s, "
 # stage markers (claimed 10 -> refs 20 -> submitted 40 -> ComfyUI 40..79 ->
 # uploading 80 -> settled 100). Only a UX estimate; 100 always comes from
 # settle_generation.
-EXPECTED_SECONDS = {"image": 60.0, "video": 300.0}
+EXPECTED_SECONDS = {"image": 60.0, "video": 2100.0}  # H3 on L40S ~30-35min
 
 
 def _claim(engine: str) -> dict | None:
