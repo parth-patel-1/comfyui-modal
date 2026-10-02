@@ -55,6 +55,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  warmEngine: (engine: string) =>
+    request<{ engine: string; state: string }>(`/api/engines/${engine}/warm`, {
+      method: "POST",
+    }).catch(() => null), // warm-up is best-effort; never block the UI
   studioConfig: () => request<StudioConfig>("/api/config/studio"),
   estimate: (q: string) => request<{ credits: number }>(`/api/config/estimate?${q}`),
   wallet: () => request<{ balance: number }>("/api/wallet"),

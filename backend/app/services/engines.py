@@ -16,6 +16,18 @@ class EngineError(RuntimeError):
     pass
 
 
+# shared warm-up state: engine -> {"state": idle|warming|warm|error, ...}
+warm_states: dict[str, dict] = {}
+
+
+def get_engine(engine: str) -> EngineClient:
+    s = get_settings()
+    urls = {"image": s.image_engine_url, "video": s.video_engine_url}
+    if engine not in urls:
+        raise ValueError(f"unknown engine: {engine}")
+    return EngineClient(urls[engine], s.engine_bearer_token)
+
+
 class EngineClient:
     """Sync client for one Modal engine (image or video)."""
 
