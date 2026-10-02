@@ -250,6 +250,66 @@ python run_product_shoot.py --images photo1.jpg --description "EcoBin medium gar
 Outputs: `output/ecom/<slug>/` (images, persona, QA notes, `manifest.json`) and
 `output/video/` for clips.
 
+## GenStudio web app (backend + frontend) - first-time setup
+
+The `backend/` (FastAPI) and `frontend/` (Next.js) folders make up the GenStudio
+studio web app. Do these steps once; after that, see "Running the web app" below.
+
+### One-time setup
+
+1. **Backend dependencies** - into the repo's virtual environment (create it first
+   if you don't have one):
+   ```powershell
+   python -m venv .venv
+   .\.venv\Scripts\Activate.ps1
+   pip install -r backend\requirements.txt
+   ```
+2. **Backend configuration** - the backend reads `backend/.env`:
+   ```powershell
+   copy backend\.env.example backend\.env
+   # then edit backend/.env and fill in:
+   #   SUPABASE_URL, SUPABASE_ANON_KEY   -> from your Supabase project settings
+   #   SUPABASE_SERVICE_KEY              -> secret key (worker storage uploads)
+   #   DB_URL                            -> Supabase Postgres pooler connection string
+   #   IMAGE_ENGINE_URL / VIDEO_ENGINE_URL / ENGINE_BEARER_TOKEN
+   #                                     -> your deployed Modal engine endpoints
+   ```
+3. **Database schema** - apply the SQL migrations in `supabase/migrations/` to your
+   Supabase project (SQL editor or `supabase db push`).
+4. **Frontend dependencies** - needs Node.js 18+:
+   ```powershell
+   cd frontend
+   npm install
+   ```
+5. **Frontend configuration** - the frontend reads `frontend/.env.local`:
+   ```
+   NEXT_PUBLIC_SUPABASE_URL=https://<ref>.supabase.co
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_...
+   ```
+
+### Running the web app (every session)
+
+Use **two terminals** from the repo root:
+
+```powershell
+# Terminal 1 - backend API (from backend/)
+.\.venv\Scripts\Activate.ps1
+cd backend
+uvicorn app.main:app --reload --port 8000
+
+# Terminal 2 - job worker (runs generation jobs; from backend/)
+.\.venv\Scripts\Activate.ps1
+cd backend
+python -m app.worker.loop
+
+# Terminal 3 - frontend (from frontend/)
+cd frontend
+npm run dev
+```
+
+Then open http://localhost:3000. API health check: http://localhost:8000/health,
+Swagger docs: http://localhost:8000/docs.
+
 ## Authentication: token ID + secret
 
 The launchers authenticate with a **Modal API token** (ID + secret) instead of a
