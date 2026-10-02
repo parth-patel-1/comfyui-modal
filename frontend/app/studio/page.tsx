@@ -141,6 +141,21 @@ function StudioInner() {
     try { await api.cancelGeneration(id); } catch { /* already terminal */ }
   }
 
+  /** Re-queue a failed/canceled generation; adds the new job to the thread. */
+  async function retry(id: string): Promise<string | null> {
+    try {
+      const gen = await api.retryGeneration(id);
+      setTurns((prev) => [...prev, {
+        prompt: gen.prompt, mode: gen.mode,
+        refs: gen.reference_paths, gen,
+      }]);
+      pollJob(gen.id);
+      return null;
+    } catch (e) {
+      return e instanceof Error ? e.message : "could not retry generation";
+    }
+  }
+
   if (cfgError) {
     return (
       <div className="mx-auto max-w-3xl px-4 py-24 text-center space-y-3">
@@ -178,7 +193,7 @@ function StudioInner() {
         {turns.map((t) => (
           <div key={t.gen.id} className="space-y-2">
             <PromptBubble prompt={t.prompt} mode={t.mode} refs={t.refs} />
-            <div className="flex"><ResultCard gen={t.gen} onCancel={cancel} /></div>
+            <div className="flex"><ResultCard gen={t.gen} onCancel={cancel} onRetry={retry} /></div>
           </div>
         ))}
         <div ref={bottomRef} />

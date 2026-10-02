@@ -103,10 +103,17 @@ function useClock(active: boolean) {
   return now;
 }
 
-export function ResultCard({ gen, onCancel }: { gen: Generation; onCancel: (id: string) => void }) {
+export function ResultCard({ gen, onCancel, onRetry }: {
+  gen: Generation;
+  onCancel: (id: string) => void;
+  onRetry: (id: string) => Promise<string | null>;
+}) {
   const isActive = ACTIVE.includes(gen.status);
   const failed = gen.status === "failed";
   const canceled = gen.status === "canceled";
+  const retryable = failed || canceled;
+  const [retrying, setRetrying] = useState(false);
+  const [retryError, setRetryError] = useState<string | null>(null);
   const took = gen.finished_at
     ? Math.max(1, Math.round((+new Date(gen.finished_at) - +new Date(gen.created_at)) / 1000))
     : null;
@@ -164,6 +171,27 @@ export function ResultCard({ gen, onCancel }: { gen: Generation; onCancel: (id: 
         <p className="text-xs text-warning bg-warning/10 border border-warning/25 rounded-lg px-3 py-2">
           Canceled — credits were refunded automatically.
         </p>
+      )}
+      {retryable && (
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            className="h-7 px-2.5 text-xs"
+            disabled={retrying}
+            title="Re-run this generation with the same prompt and settings"
+            onClick={async () => {
+              setRetrying(true);
+              setRetryError(null);
+              const err = await onRetry(gen.id);
+              setRetrying(false);
+              if (err) setRetryError(err);
+            }}
+          >
+            {retrying ? <Spinner className="h-3 w-3" /> : null}
+            {retrying ? "Retrying…" : "Retry"}
+          </Button>
+          {retryError && <span className="text-xs text-danger">{retryError}</span>}
+        </div>
       )}
 
       <Media gen={gen} />

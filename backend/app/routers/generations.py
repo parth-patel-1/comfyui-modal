@@ -259,6 +259,36 @@ def cancel_generation(generation_id: uuid.UUID, user: UserDep) -> dict:
     return {"status": "canceled"}
 
 
+@router.post("/generations/{generation_id}/retry")
+def retry_generation(generation_id: uuid.UUID, user: UserDep) -> dict:
+    """Re-queue a failed or canceled generation with identical inputs.
+
+    Creates a NEW generation row via the same request_generation RPC as a
+    normal create (credits are charged again; the automatic refund on
+    failure still applies). The original row is left untouched for history.
+    """
+    with db_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            "select engine, mode, prompt, negative_prompt, params, "
+            "reference_paths, status from public.generations where id = %s",
+            (generation_id,),
+        )
+        row = cur.fetchone()
+    if row is None:
+        raise HTTPException(404, "generation not found")
+    engine, mode, prompt, negative_prompt, params, reference_paths, status = row
+    if status not in ("failed", "canceled"):
+        raise HTTPException(409, f"cannot retry a generation with status '{status}'")
+
+    body = GenerationCreate(
+        engine=engine, mode=mode, prompt=prompt,
+        negative_prompt=negative_prompt or "",
+        params=params if isinstance(params, dict) else json.loads(params or "{}"),
+        reference_paths=reference_paths or [],
+    )
+    return create_generation(body, user)
+
+
 @router.get("/me")
 def me(user: UserDep) -> dict:
     """Caller identity for the UI (role drives the Admin nav link)."""

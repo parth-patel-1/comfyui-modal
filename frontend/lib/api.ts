@@ -77,6 +77,9 @@ export const api = {
     request<{ status: string }>(`/api/generations/${id}/cancel`, {
       method: "POST",
     }),
+  /** Re-queue a failed/canceled generation with the same prompt + settings. */
+  retryGeneration: (id: string) =>
+    request<Generation>(`/api/generations/${id}/retry`, { method: "POST" }),
   uploadTicket: (filename: string) =>
     request<{ bucket: string; path: string; max_bytes: number }>(
       `/api/uploads/ticket?filename=${encodeURIComponent(filename)}`,
