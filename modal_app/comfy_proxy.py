@@ -96,6 +96,30 @@ class ComfyProxy:
             elif message["type"] == "http.disconnect":
                 return
 
+        # readiness probe: answer /health ourselves so clients get a clean
+        # 200 once ComfyUI is up (ComfyUI has no /health route, so forwarding
+        # this request upstream would return a misleading 404)
+        if scope["path"] == "/health" and scope["method"] == "GET":
+            try:
+                resp = await client.get("/system_stats")
+                resp.aclose()
+                if resp.status_code == 200:
+                    body = b'{"status":"ok"}'
+                    await send({"type": "http.response.start",
+                                "status": 200,
+                                "headers": [(b"content-type",
+                                             b"application/json")]})
+                    await send({"type": "http.response.body", "body": body})
+                    return
+            except httpx.HTTPError:
+                pass
+            body = b'{"error": "comfyui not ready"}'
+            await send({"type": "http.response.start", "status": 503,
+                        "headers": [(b"content-type",
+                                     b"application/json")]})
+            await send({"type": "http.response.body", "body": body})
+            return
+
         req = client.build_request(
             scope["method"],
             scope["path"],
