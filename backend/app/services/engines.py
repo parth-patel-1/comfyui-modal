@@ -38,17 +38,18 @@ class EngineClient:
 
     def wait_ready(self, cold_start_wait: float | None = None,
                    poll_every: float = 10.0) -> None:
-        """Block until the engine answers /health with 200.
+        """Block until the engine's ComfyUI is serving requests.
 
-        Wakes a cold (scaled-to-zero) Modal container instead of failing the
-        job. Raises EngineError only if still not ready after the deadline.
+        Probes /system_stats (a real ComfyUI route). Through the cold-start
+        proxy: 503 = container booting, 200 = ready, 404 = the Modal app or
+        label does not exist at all (no cold start will ever fix that).
         """
         deadline = self._cold_start_deadline(cold_start_wait)
         waited = False
         while True:
             try:
                 with self._client() as client:
-                    resp = client.get("/health")
+                    resp = client.get("/system_stats")
                 if resp.status_code == 200:
                     if waited:
                         log.info("engine %s is warm", self.base_url)
