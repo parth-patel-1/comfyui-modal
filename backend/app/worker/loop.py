@@ -28,7 +28,7 @@ import workflow_factory as factory  # noqa: E402
 CLAIM_SQL = """
 with next_job as (
     select id from public.generations
-    where status = 'queued'
+    where status = 'queued' and engine = %s
     order by created_at
     for update skip locked
     limit 1
@@ -55,9 +55,9 @@ PROGRESS_SQL = ("update public.generations set status = %s, progress = %s, "
 EXPECTED_SECONDS = {"image": 60.0, "video": 300.0}
 
 
-def _claim() -> dict | None:
+def _claim(engine: str) -> dict | None:
     with db_conn() as conn, conn.cursor() as cur:
-        cur.execute(CLAIM_SQL)
+        cur.execute(CLAIM_SQL, (engine,))
         row = cur.fetchone()
         if row is None:
             conn.rollback()
@@ -219,21 +219,37 @@ def _process(job: dict) -> None:
             log.exception("settle failed for %s", job_id)
 
 
-def run_forever() -> None:
+def run_forever(engine: str) -> None:
+    """Dedicated worker loop for one engine (image or video).
+
+    A separate loop per engine keeps the two generation types independent:
+    a long-running video job never blocks image jobs and vice versa.
+    """
     interval = get_settings().worker_poll_interval_s
-    log.info("worker started (poll %.1fs)", interval)
+    log.info("worker[%s] started (poll %.1fs)", engine, interval)
     while True:
         try:
-            job = _claim()
+            job = _claim(engine)
         except Exception:  # noqa: BLE001
-            log.exception("claim failed")
+            log.exception("worker[%s] claim failed", engine)
             time.sleep(interval)
             continue
         if job is None:
             time.sleep(interval)
             continue
+        log.info("worker[%s] claimed job %s", engine, job["id"])
         _process(job)
 
 
 if __name__ == "__main__":
-    run_forever()
+    import threading
+
+    threads = [threading.Thread(target=run_forever, args=(e,), daemon=True)
+               for e in ("image", "video")]
+    for t in threads:
+        t.start()
+    try:
+        while True:
+            time.sleep(3600)
+    except KeyboardInterrupt:
+        log.info("worker stopped")
