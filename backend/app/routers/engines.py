@@ -40,19 +40,29 @@ def _warm_engine(engine: str) -> None:
                                "ts": time.time()}
 
 
+def kick_warm(engine: str) -> None:
+    """Start a background warm-up for the engine (idempotent).
+
+    Called by POST /api/engines/{engine}/warm and automatically from
+    create_generation (submit-time warm-up). No-op when already warming
+    or warm; retries after a previous warm attempt errored.
+    """
+    with _WARM_LOCK:
+        state = warm_states.get(engine, {}).get("state")
+        if engine in _WARM_STARTED and state in ("warming", "warm", "queued"):
+            return
+        _WARM_STARTED.add(engine)
+        warm_states[engine] = {"state": "queued", "detail": None,
+                               "ts": time.time()}
+        threading.Thread(target=_warm_engine, args=(engine,),
+                         daemon=True, name=f"warm-{engine}").start()
+
+
 @router.post("/{engine}/warm")
 def warm(engine: str) -> dict:
     if engine not in ("image", "video"):
         raise HTTPException(status_code=404, detail="unknown engine")
-    with _WARM_LOCK:
-        # only one warm thread per engine at a time; repeat calls while a
-        # warm-up is running are ignored (and are no-ops when warm)
-        first = engine not in _WARM_STARTED or warm_states.get(engine, {}).get(
-            "state") in ("error",)
-        if first:
-            _WARM_STARTED.add(engine)
-            threading.Thread(target=_warm_engine, args=(engine,),
-                             daemon=True, name=f"warm-{engine}").start()
+    kick_warm(engine)
     state = warm_states.get(engine, {"state": "queued", "detail": None,
                                      "ts": time.time()})
     return {"engine": engine, **state}

@@ -46,13 +46,6 @@ function StudioInner() {
     api.studioConfig().then(setCfg).catch((e) => setCfgError(e.message));
   }, []);
 
-  // predictive warm-up: boot the engine's GPU as soon as the user shows
-  // intent (opens studio / switches image<->video) instead of waiting for
-  // the first Generate click
-  useEffect(() => {
-    api.warmEngine(engine);
-  }, [engine]);
-
   // "Use in Studio" from the Discover page (?template=<id>): fetch it once.
   useEffect(() => {
     if (!templateId) return;

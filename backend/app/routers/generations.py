@@ -134,6 +134,13 @@ def create_generation(body: GenerationCreate, user: UserDep) -> dict:
                 (generation_id,),
             )
             row = cur.fetchone()
+
+    # submit-time warm-up: the moment a job is accepted, start booting that
+    # engine's GPU in the background so the worker finds it warm (or nearly)
+    # instead of waking it itself
+    from app.routers.engines import kick_warm  # local import avoids a cycle
+    kick_warm(body.engine)
+
     keys = ["id", "engine", "mode", "status", "progress", "started_at", "prompt",
             "params", "reference_paths", "credits_charged", "error", "output_paths",
             "created_at", "finished_at"]
