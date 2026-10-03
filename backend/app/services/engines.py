@@ -126,6 +126,14 @@ class EngineClient:
                 continue
             raise EngineError(f"/prompt {resp.status_code}: {resp.text[:500]}")
 
+    def interrupt(self) -> None:
+        """Ask ComfyUI to abort the currently running prompt (best effort)."""
+        try:
+            with self._client() as client:
+                client.post("/interrupt")
+        except httpx.HTTPError as e:
+            log.info("interrupt failed: %s", e)
+
     def poll(self, prompt_id: str) -> dict | None:
         """Return the history entry when finished, else None."""
         with self._client() as client:

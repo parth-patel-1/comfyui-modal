@@ -75,6 +75,14 @@ def _set_progress(job_id: str, status: str, progress: int,
         conn.commit()
 
 
+def _job_status(job_id: str) -> str | None:
+    """Current status of a generation row (cheap; used to honor cancels)."""
+    with db_conn() as conn, conn.cursor() as cur:
+        cur.execute("select status from public.generations where id = %s", (job_id,))
+        row = cur.fetchone()
+    return row[0] if row else None
+
+
 def _engine_url(engine: str) -> str:
     """Endpoint from modal_settings (runtime-changeable); env fallback."""
     with db_conn() as conn, conn.cursor() as cur:
@@ -198,6 +206,13 @@ def _process(job: dict) -> None:
         last_progress = 40
         entry = None
         while time.monotonic() < deadline:
+            # honor a user cancel while the engine runs: the RPC has already
+            # refunded credits and set status='canceled'; abort the prompt
+            # server-side and stop without settling anything
+            if _job_status(job_id) == "canceled":
+                client.interrupt()
+                log.info("job %s canceled by user mid-run; prompt aborted", job_id)
+                return
             entry = client.poll(prompt_id)
             if entry is not None:
                 break
@@ -209,6 +224,11 @@ def _process(job: dict) -> None:
             time.sleep(client.poll_interval)
         if entry is None:
             raise EngineError("engine timed out")
+        if _job_status(job_id) == "canceled":
+            # cancel landed between the last check and completion; engine
+            # output exists but ownership of the outcome belongs to the user
+            log.info("job %s canceled just before completion; skipping settle", job_id)
+            return
         _set_progress(job_id, "uploading", 90, eta_s=None)
 
         # 4) download outputs and publish to Storage under the user's folder
