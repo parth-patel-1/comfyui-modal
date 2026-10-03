@@ -9,7 +9,7 @@ import { Badge, Button, ErrorText, Spinner } from "@/components/ui";
 
 const TERMINAL = new Set(["succeeded", "failed", "canceled"]);
 
-/** One job the user has lined up but not submitted yet. */
+/** A job that could not be submitted (e.g. insufficient credits) — kept for retry. */
 interface PendingItem {
   key: string;
   payload: SubmitPayload;
@@ -51,8 +51,6 @@ function QueueInner() {
   const [mode, setMode] = useState<Mode>("t2i");
   const [pending, setPending] = useState<PendingItem[]>([]);
   const [turns, setTurns] = useState<Turn[]>([]);
-  const [starting, setStarting] = useState(false);
-  const [startError, setStartError] = useState<string | null>(null);
   const [estimate, setEstimate] = useState<number | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -64,7 +62,7 @@ function QueueInner() {
     api.studioConfig().then(setCfg).catch((e) => setCfgError(e.message));
   }, []);
 
-  // live credit estimate for the composer (debounced) â€” same as studio
+  // live credit estimate for the composer (debounced) — same as studio
   useEffect(() => {
     if (!cfg) return;
     const t = setTimeout(() => {
@@ -112,7 +110,7 @@ function QueueInner() {
   useEffect(() => () => stopPolling(), [stopPolling]);
 
   // Show generations that are already in flight (submitted earlier from this
-  // page, or after a refresh) â€” the queue keeps working while the user is away.
+  // page, or after a refresh) — the queue keeps working while the user is away.
   useEffect(() => {
     let cancelled = false;
     api.listGenerations(50)
@@ -129,46 +127,38 @@ function QueueInner() {
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [turns.length]);
 
-  /** Composer "Add to queue": validate + price now, keep locally. */
+  /** Composer "Add to queue": submit immediately — it lands in the server queue
+   *  and starts automatically (parallel slots permitting). */
   async function addToQueue(p: SubmitPayload): Promise<string | null> {
     let credits: number | null = null;
     try {
       credits = (await api.estimate(estimateQuery(p))).credits;
     } catch { /* pricing estimate is best-effort */ }
-    keyRef.current += 1;
-    setPending((prev) => [...prev, { key: String(keyRef.current), payload: p, credits, error: null }]);
-    return null;
+    try {
+      const gen = await api.createGeneration({
+        ...p,
+        params: p.params as Record<string, unknown>,
+      });
+      setTurns((prev) => [...prev, { prompt: p.prompt, mode: p.mode, refs: p.reference_paths, gen }]);
+      pollJob(gen.id);
+      return null;
+    } catch (e) {
+      keyRef.current += 1;
+      setPending((prev) => [...prev, {
+        key: String(keyRef.current),
+        payload: p,
+        credits,
+        error: e instanceof Error ? e.message : "could not queue job",
+      }]);
+      return null;
+    }
   }
 
-  async function startQueue() {
-    if (pending.length === 0 || starting) return;
-    setStarting(true);
-    setStartError(null);
-    const failed: PendingItem[] = [];
-    for (const item of pending) {
-      try {
-        const gen = await api.createGeneration({
-          ...item.payload,
-          params: item.payload.params as Record<string, unknown>,
-        });
-        setTurns((prev) => [...prev, {
-          prompt: item.payload.prompt,
-          mode: item.payload.mode,
-          refs: item.payload.reference_paths,
-          gen,
-        }]);
-        pollJob(gen.id);
-      } catch (e) {
-        failed.push({ ...item, error: e instanceof Error ? e.message : "could not queue job" });
-      }
-    }
-    setPending(failed); // keep only the items that failed (with their error)
-    setStarting(false);
-    if (failed.length > 0) {
-      setStartError(
-        `${pending.length - failed.length} job(s) queued; ${failed.length} could not be queued â€” fix or remove them below.`);
-    }
+  async function retryFailed(item: PendingItem) {
+    setPending((prev) => prev.filter((x) => x.key !== item.key));
+    await addToQueue(item.payload);
   }
+
 
   async function cancel(id: string) {
     const ok = window.confirm("Cancel this generation? Credits are refunded.");
@@ -196,16 +186,14 @@ function QueueInner() {
     );
   }
 
-  const totalCredits = pending.reduce((s, p) => s + (p.credits ?? 0), 0);
-
   return (
     <div className="flex min-h-[calc(100vh-3.5rem)] flex-col">
       <div className="mx-auto w-full max-w-3xl flex-1 space-y-5 px-4 py-6">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Generation <span className="gs-gradient-text">queue</span></h1>
           <p className="mt-1 text-sm text-muted">
-            Line up as many jobs as you want, then hit Start â€” the app runs them in the
-            background (several in parallel) while you do other things. Results land in your gallery.
+            Add as many jobs as you want — each one starts generating immediately and runs in
+            the background (several in parallel) while you do other things. Results land in your gallery.
           </p>
         </div>
 
@@ -225,22 +213,18 @@ function QueueInner() {
                   </div>
                   {item.error && <ErrorText>{item.error}</ErrorText>}
                 </div>
-                <Button variant="ghost" className="h-7 px-2 text-xs"
-                  disabled={starting}
-                  onClick={() => setPending((prev) => prev.filter((x) => x.key !== item.key))}>
-                  Remove
-                </Button>
+                <div className="flex flex-col gap-1">
+                  <Button variant="ghost" className="h-7 px-2 text-xs"
+                    onClick={() => retryFailed(item)}>
+                    Retry
+                  </Button>
+                  <Button variant="ghost" className="h-7 px-2 text-xs"
+                    onClick={() => setPending((prev) => prev.filter((x) => x.key !== item.key))}>
+                    Remove
+                  </Button>
+                </div>
               </div>
             ))}
-            <div className="flex items-center gap-3">
-              <Button onClick={startQueue} disabled={starting} className="h-9 px-4">
-                {starting ? <Spinner /> : `Start queue (${pending.length})`}
-              </Button>
-              <span className="text-xs text-muted">
-                {totalCredits > 0 ? `â‰ˆ ${totalCredits} credits total, charged as each job starts` : ""}
-              </span>
-            </div>
-            {startError && <ErrorText>{startError}</ErrorText>}
           </div>
         )}
 
@@ -255,7 +239,7 @@ function QueueInner() {
 
         {pending.length === 0 && turns.length === 0 && (
           <div className="py-10 text-center text-sm text-muted">
-            Nothing queued yet â€” add your first job with the composer below.
+            Nothing queued yet — add your first job with the composer below.
           </div>
         )}
       </div>
