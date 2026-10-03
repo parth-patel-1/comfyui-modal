@@ -207,7 +207,6 @@ function StudioInner() {
         mode={mode} setMode={setMode}
         estimate={estimate}
         template={template}
-        disabled={turns.some((t) => !TERMINAL.has(t.gen.status))}
         onSubmit={submit}
       />
     </div>

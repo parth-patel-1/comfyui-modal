@@ -53,7 +53,7 @@ PROGRESS_SQL = ("update public.generations set status = %s, progress = %s, "
 # stage markers (claimed 10 -> refs 20 -> submitted 40 -> ComfyUI 40..79 ->
 # uploading 80 -> settled 100). Only a UX estimate; 100 always comes from
 # settle_generation.
-EXPECTED_SECONDS = {"image": 60.0, "video": 2100.0}  # H3 on L40S ~30-35min
+EXPECTED_SECONDS = {"image": 60.0, "video": 960.0}  # measured on L40S: 20 steps x ~49s/it ≈ 16 min (Modal logs Oct 3)
 
 
 def _claim(engine: str) -> dict | None:
@@ -265,26 +265,46 @@ def _process(job: dict) -> None:
             log.exception("settle failed for %s", job_id)
 
 
-def run_forever(engine: str) -> None:
-    """Dedicated worker loop for one engine (image or video).
+def _slots(engine: str) -> int:
+    """Concurrent job slots for an engine (app_settings.worker_parallel_slots)."""
+    try:
+        with db_conn() as conn, conn.cursor() as cur:
+            cur.execute("select worker_parallel_slots from public.app_settings where id = 1")
+            row = cur.fetchone()
+        return max(1, int(row[0])) if row else 1
+    except Exception:  # noqa: BLE001 -- never let a settings glitch stop claiming
+        log.exception("worker[%s] could not read worker_parallel_slots; using 1", engine)
+        return 1
 
-    A separate loop per engine keeps the two generation types independent:
-    a long-running video job never blocks image jobs and vice versa.
+
+def run_forever(engine: str) -> None:
+    """Worker loop for one engine (image or video).
+
+    Runs up to app_settings.worker_parallel_slots jobs CONCURRENTLY per
+    engine: each claimed job gets its own thread, so a batch of queued jobs
+    drains in parallel (SKIP LOCKED guarantees no double-claim). A separate
+    loop per engine keeps the two generation types independent: a long-running
+    video job never blocks image jobs and vice versa.
     """
     interval = get_settings().worker_poll_interval_s
     log.info("worker[%s] started (poll %.1fs)", engine, interval)
+    active: list[threading.Thread] = []
     while True:
         try:
-            job = _claim(engine)
+            active = [t for t in active if t.is_alive()]
+            slots = _slots(engine)
+            while len(active) < slots:
+                job = _claim(engine)
+                if job is None:
+                    break
+                log.info("worker[%s] claimed job %s (%d/%d slots busy)",
+                         engine, job["id"], len(active) + 1, slots)
+                t = threading.Thread(target=_process, args=(job,), daemon=True)
+                t.start()
+                active.append(t)
         except Exception:  # noqa: BLE001
             log.exception("worker[%s] claim failed", engine)
-            time.sleep(interval)
-            continue
-        if job is None:
-            time.sleep(interval)
-            continue
-        log.info("worker[%s] claimed job %s", engine, job["id"])
-        _process(job)
+        time.sleep(interval)
 
 
 if __name__ == "__main__":

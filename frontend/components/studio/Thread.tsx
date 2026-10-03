@@ -10,7 +10,8 @@ const ACTIVE: string[] = ["queued", "provisioning", "running", "uploading"];
 // Rough wall-clock targets per engine — must mirror EXPECTED_SECONDS in
 // backend/app/worker/loop.py. Used to smooth the percentage between the
 // coarse progress values the worker writes.
-const EXPECTED_S: Record<string, number> = { image: 60, video: 2100 };
+// Measured from real Modal render logs (20 steps x ~49s/it ≈ 16 min).
+const EXPECTED_S: Record<string, number> = { image: 60, video: 960 };
 
 const STATUS_LABEL: Record<string, string> = {
   queued: "Queued",
@@ -106,7 +107,8 @@ function useClock(active: boolean) {
 export function ResultCard({ gen, onCancel, onRetry }: {
   gen: Generation;
   onCancel: (id: string) => void;
-  onRetry: (id: string) => Promise<string | null>;
+  /** Optional — omitted on the queue page, where retry re-submits from history. */
+  onRetry?: ((id: string) => Promise<string | null>) | null;
 }) {
   const isActive = ACTIVE.includes(gen.status);
   const failed = gen.status === "failed";
@@ -171,9 +173,11 @@ export function ResultCard({ gen, onCancel, onRetry }: {
             <p className="mt-1.5 text-xs text-faint">
               {gen.status === "provisioning"
                 ? "Waking the GPU — this can take a few minutes…"
-                : `${etaMin !== null ? `About ${etaMin} min left. ` : ""}`
-                  + "Video generation takes roughly 25–35 minutes — you can leave this page; "
-                  + "it keeps processing in the background and results are saved to your library."}
+                : etaMin !== null
+                  ? `About ${etaMin} min left (based on actual render progress) — you can leave this page; `
+                    + "it keeps processing in the background and results are saved to your library."
+                  : "Estimating time from the engine's live render progress — you can leave this page; "
+                    + "results are saved to your library."}
             </p>
           ) : etaMin !== null ? (
             <p className="mt-1.5 text-[11px] text-faint">
@@ -195,7 +199,7 @@ export function ResultCard({ gen, onCancel, onRetry }: {
           Canceled — credits were refunded automatically.
         </p>
       )}
-      {retryable && (
+      {retryable && onRetry && (
         <div className="flex items-center gap-2">
           <Button
             variant="outline"

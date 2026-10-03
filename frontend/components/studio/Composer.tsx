@@ -36,7 +36,8 @@ export interface SubmitPayload {
 }
 
 export default function Composer({
-  cfg, engine, setEngine, mode, setMode, estimate, disabled, template, onSubmit,
+  cfg, engine, setEngine, mode, setMode, estimate, disabled = false, template,
+  submitLabel = "Generate", onSubmit,
 }: {
   cfg: StudioConfig;
   engine: Engine;
@@ -44,8 +45,10 @@ export default function Composer({
   mode: Mode;
   setMode: (m: Mode) => void;
   estimate: number | null;
-  disabled: boolean;
+  disabled?: boolean;
   template?: PromptTemplate | null;
+  /** Button text — "Add to queue" on the queue page, "Generate" in studio. */
+  submitLabel?: string;
   onSubmit: (p: SubmitPayload) => Promise<string | null>;
 }) {
   const [prompt, setPrompt] = useState("");
@@ -253,7 +256,7 @@ export default function Composer({
           <div className="ml-auto flex items-center gap-2">
             {estimate !== null && <Badge tone="accent">~ {estimate} credits</Badge>}
             <Button onClick={submit} disabled={busy || disabled} className="h-9 px-4">
-              {busy ? <Spinner /> : "Generate"}
+              {busy ? <Spinner /> : submitLabel}
             </Button>
           </div>
         </div>
