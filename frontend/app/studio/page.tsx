@@ -138,6 +138,9 @@ function StudioInner() {
   }
 
   async function cancel(id: string) {
+    const ok = window.confirm(
+      "Cancel this generation? It keeps running even if you close the browser — cancel only if you really don't want it. Credits are refunded.");
+    if (!ok) return;
     try { await api.cancelGeneration(id); } catch { /* already terminal */ }
   }
 

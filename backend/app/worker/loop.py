@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -46,7 +47,7 @@ returning g.id, g.user_id, g.engine, g.mode, g.prompt, g.negative_prompt,
 """
 
 PROGRESS_SQL = ("update public.generations set status = %s, progress = %s, "
-                "comfy_prompt_id = %s where id = %s")
+                "comfy_prompt_id = %s, eta_seconds = %s where id = %s")
 
 # Rough wall-clock targets used to interpolate progress between the coarse
 # stage markers (claimed 10 -> refs 20 -> submitted 40 -> ComfyUI 40..79 ->
@@ -68,9 +69,9 @@ def _claim(engine: str) -> dict | None:
 
 
 def _set_progress(job_id: str, status: str, progress: int,
-                  comfy_prompt_id: str = "") -> None:
+                  comfy_prompt_id: str = "", eta_s: int | None = None) -> None:
     with db_conn() as conn, conn.cursor() as cur:
-        cur.execute(PROGRESS_SQL, (status, progress, comfy_prompt_id, job_id))
+        cur.execute(PROGRESS_SQL, (status, progress, comfy_prompt_id, eta_s, job_id))
         conn.commit()
 
 
@@ -156,16 +157,41 @@ def _process(job: dict) -> None:
             ref_names.append(client.upload_image(data, f"gen_{job_id[:8]}_{i}.{ext}"))
         _set_progress(job_id, "running", 20)
 
-        # 2) build + submit workflow
+        # 2) build + submit workflow (client_id = prompt_id so ComfyUI's
+        #    websocket events can be correlated back to this job)
         workflow = _build_workflow(job, ref_names)
-        prompt_id = client.submit(workflow)
+        prompt_id = client.submit(workflow, client_id=job_id)
         _set_progress(job_id, "running", 40, comfy_prompt_id=prompt_id)
         log.info("job %s submitted as prompt %s", job_id, prompt_id)
 
-        # 3) wait for completion, interpolating progress 40->79 while the
-        #    engine runs (per-step events would need the ComfyUI websocket;
-        #    wall-clock estimate over the expected duration is good enough
-        #    for a smooth percentage without extra infrastructure)
+        # 2b) background websocket listener: real per-step progress + a
+        #     measured ETA (avg step time x remaining steps) written to the
+        #     DB as each step completes. The HTTP poll below still decides
+        #     completion; this only makes the UI truthful.
+        step_state = {"t0": None}
+
+        def _on_step(value: int, total: int) -> None:
+            now = time.monotonic()
+            progress = min(88, 40 + int(45 * value / total))
+            if step_state["t0"] is None:
+                # first completed step: estimate from the engine's expected
+                # total duration; refined by measurement on later steps
+                step_state["t0"] = now
+                per_step = EXPECTED_SECONDS.get(job["engine"], 120.0) / total
+            else:
+                per_step = (now - step_state["t0"]) / max(1, value - 1)
+            remaining = total - value
+            eta = int(remaining * per_step + 90)  # +90s for VAE decode/encode
+            _set_progress(job_id, "running", progress, comfy_prompt_id=prompt_id,
+                          eta_s=eta)
+            log.info("job %s step %d/%d -> progress %d%%, eta %ds",
+                     job_id, value, total, progress, eta)
+
+        watcher = threading.Thread(target=client.watch_progress,
+                                   args=(prompt_id, _on_step), daemon=True)
+        watcher.start()
+
+        # 3) wait for completion via HTTP /history (source of truth)
         deadline = time.monotonic() + get_settings().job_timeout_s
         expected = EXPECTED_SECONDS.get(job["engine"], 120.0)
         submitted_at = time.monotonic()
@@ -183,7 +209,7 @@ def _process(job: dict) -> None:
             time.sleep(client.poll_interval)
         if entry is None:
             raise EngineError("engine timed out")
-        _set_progress(job_id, "uploading", 80)
+        _set_progress(job_id, "uploading", 90, eta_s=None)
 
         # 4) download outputs and publish to Storage under the user's folder
         outputs: list[str] = []

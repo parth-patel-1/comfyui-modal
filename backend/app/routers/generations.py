@@ -157,7 +157,8 @@ def list_generations(
         cur.execute(
             "select id, engine, mode, status, progress, started_at, prompt, params, "
             "reference_paths, credits_charged, error, output_paths, "
-            "created_at, finished_at from public.generations "
+            "created_at, finished_at, gpu_type, eta_seconds from "
+            "public.generations "
             "where user_id = %s order by created_at desc limit %s offset %s",
             (user.id, limit, offset),
         )
@@ -172,7 +173,8 @@ def get_generation(generation_id: uuid.UUID, user: UserDep) -> dict:
         cur.execute(
             "select id, user_id, engine, mode, status, progress, started_at, prompt, "
             "params, reference_paths, credits_charged, error, output_paths, "
-            "created_at, finished_at from public.generations where id = %s",
+            "created_at, finished_at, gpu_type, eta_seconds from "
+            "public.generations where id = %s",
             (generation_id,),
         )
         row = cur.fetchone()

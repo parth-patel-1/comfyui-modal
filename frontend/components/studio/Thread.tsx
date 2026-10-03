@@ -130,6 +130,15 @@ export function ResultCard({ gen, onCancel, onRetry }: {
     : gen.progress;
   const indeterminate = gen.status === "queued" && gen.progress === 0;
 
+  // ETA: prefer the worker's measured estimate (from real ComfyUI step
+  // events); fall back to wall clock vs. the engine's expected duration.
+  const etaS = isActive && gen.status !== "queued" && gen.status !== "provisioning"
+    ? (gen.eta_seconds && gen.eta_seconds > 0
+        ? gen.eta_seconds
+        : Math.max(0, (EXPECTED_S[gen.engine] ?? 120) - elapsedS))
+    : null;
+  const etaMin = etaS !== null ? Math.max(1, Math.ceil(etaS / 60)) : null;
+
   return (
     <div className="gs-fade-up max-w-[85%] rounded-xl border border-line bg-surface p-4 space-y-3">
       <div className="flex items-center gap-2 flex-wrap">
@@ -162,9 +171,13 @@ export function ResultCard({ gen, onCancel, onRetry }: {
             <p className="mt-1.5 text-xs text-faint">
               {gen.status === "provisioning"
                 ? "Waking the GPU — this can take a few minutes…"
-                : `About ${Math.max(1, Math.ceil((EXPECTED_S.video - elapsedS) / 60))} min left. `
+                : `${etaMin !== null ? `About ${etaMin} min left. ` : ""}`
                   + "Video generation takes roughly 25–35 minutes — you can leave this page; "
                   + "it keeps processing in the background and results are saved to your library."}
+            </p>
+          ) : etaMin !== null ? (
+            <p className="mt-1.5 text-[11px] text-faint">
+              About {etaMin} min left — you can leave this page; it keeps processing.
             </p>
           ) : (
             <p className="mt-1.5 text-[11px] text-faint">{STATUS_LABEL[gen.status]}…</p>

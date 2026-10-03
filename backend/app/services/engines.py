@@ -106,12 +106,16 @@ class EngineClient:
                 continue
             raise EngineError(f"upload failed: {resp.status_code} {resp.text[:300]}")
 
-    def submit(self, workflow: dict, cold_start_wait: float | None = None) -> str:
+    def submit(self, workflow: dict, client_id: str = "",
+               cold_start_wait: float | None = None) -> str:
         """Submit, retrying while the engine is cold (503 'not ready')."""
         deadline = self._cold_start_deadline(cold_start_wait)
+        payload = {"prompt": workflow}
+        if client_id:
+            payload["client_id"] = client_id
         while True:
             with self._client() as client:
-                resp = client.post("/prompt", json={"prompt": workflow})
+                resp = client.post("/prompt", json=payload)
             if resp.status_code == 200:
                 payload = resp.json()
                 if payload.get("node_errors"):
@@ -137,6 +141,45 @@ class EngineClient:
                 raise EngineError(f"prompt {prompt_id} failed: {status}")
             return entry
         return None
+
+    def watch_progress(self, prompt_id: str, on_step) -> None:
+        """Subscribe to ComfyUI's websocket and forward per-step progress.
+
+        Calls ``on_step(value, total)`` for every 'progress' message the
+        engine broadcasts while ``prompt_id`` runs. Blocking; returns when
+        the socket closes (job finished or engine recycled). Connection
+        problems are logged and swallowed -- the HTTP /history poll in the
+        worker remains the source of truth for completion.
+        """
+        import json as _json
+
+        from websockets.sync.client import connect as ws_connect
+
+        url = (self.base_url.replace("http://", "ws://")
+               .replace("https://", "wss://") + f"/ws?clientId={prompt_id}")
+        try:
+            with ws_connect(url, additional_headers=self._headers,
+                            open_timeout=30, max_size=2**22) as ws:
+                for raw in ws:
+                    if isinstance(raw, bytes):
+                        continue  # binary preview frames
+                    try:
+                        msg = _json.loads(raw)
+                    except ValueError:
+                        continue
+                    mtype = msg.get("type")
+                    if mtype == "progress":
+                        data = msg.get("data") or {}
+                        value, total = data.get("value"), data.get("max")
+                        if isinstance(value, int) and isinstance(total, int) and total > 0:
+                            on_step(value, total)
+                    elif mtype == "execution_error":
+                        raise EngineError(
+                            f"engine execution error: {_json.dumps(msg.get('data'))[:500]}")
+        except EngineError:
+            raise
+        except Exception as e:  # noqa: BLE001 -- watcher must never kill the job
+            log.info("progress ws for prompt %s closed: %s", prompt_id, e)
 
     def run(self, workflow: dict) -> tuple[str, dict]:
         """Submit and wait; returns (prompt_id, history_entry)."""

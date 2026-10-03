@@ -19,6 +19,8 @@ export interface Generation {
   started_at?: string | null;
   finished_at: string | null;
   gpu_type?: string | null;
+  /** Worker-measured seconds remaining (from ComfyUI step events); null = estimate. */
+  eta_seconds?: number | null;
 }
 
 export interface EngineCfg {
