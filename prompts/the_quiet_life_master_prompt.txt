@@ -1,0 +1,89 @@
+---------------------------------------------------------------------
+PART 1: GLOBAL SETTINGS (apply to every scene)
+---------------------------------------------------------------------
+Format: Vertical 9:16, cinematic, 15 seconds total, 5 scenes of 3 seconds each.
+Story: A burnt-out corporate man walks out of his office job in the night, drives across the country, finds a small rural town, rents an old farmhouse, learns farming from a gruff neighbor, and finds peace.
+Tone: Heavy, masculine, grounded, nostalgic, ending in calm and serenity.
+Look: Cinematic color grade, film grain, shallow depth of field, realistic skin, fabric and wood texture. Colors move from cold blue (corporate) to warm amber and gold (rural peace).
+
+CHARACTER CONSISTENCY TAG (paste into EVERY scene prompt):
+"same man, 30s, short dark hair, stubble, tired but determined eyes"
+
+NEGATIVE PROMPT (use on every scene):
+"text, watermark, subtitles, logos, distorted hands, extra fingers, cartoon, anime, warped faces, blurry, low quality, flickering, morphing"
+
+---------------------------------------------------------------------
+PART 2: VISUAL PROMPTS (generate one clip per scene)
+---------------------------------------------------------------------
+
+SCENE 1 - THE CORPORATE EXIT (0-3s)
+Cinematic vertical video, 9:16. Night, rain-slick street outside a towering glass office building, one floor still glowing with cold fluorescent light, rows of empty cubicles visible through the windows. Same man, 30s, short dark hair, stubble, tired but determined eyes, in a rumpled white shirt and loosened navy tie, a laptop bag over one shoulder, pushes through the revolving door of the lobby. He stops at the security desk, unclips his ID badge and lanyard, and lets it drop onto the marble with a clack, then walks out without looking back. Outside, he pulls off the tie, tosses it into the bed of an old dusty pickup, and climbs in. Engine rumbles, headlights flare, city lights and neon reflections smear across the wet windshield, the glowing tower shrinking in the rearview mirror. Cold blue corporate tones shifting to warm amber, anamorphic lens flares, realistic fabric and skin texture, film grain. [Tracking shot following him out, push in on the badge drop, cut to rearview mirror pull]
+
+SCENE 2 - THE OPEN ROAD (3-6s)
+Cinematic vertical video, 9:16. Dawn breaking over an endless flat plain, the highway a single dark ribbon vanishing into the horizon. Same man, 30s, short dark hair, stubble, tired but determined eyes, now in a worn denim jacket over a gray t-shirt, one hand on the steering wheel, elbow out the open window, wind whipping his hair. A single canvas duffel bag and a worn paperback sit on the passenger seat, a thermos rattling in the cup holder. Sky shifting from deep violet to pink to molten gold, sun flaring through the dusty windshield, a hawk circling above, power lines and wheat fields sweeping past, dust trailing behind the truck. Faint relief and a small smile appear on his face. Warm golden light, lens flare, shallow depth of field on his face, cinematic color grade. [Drone pull back and rise, then cut to side-window close-up]
+
+SCENE 3 - THE ARRIVAL (6-9s)
+Cinematic vertical video, 9:16. Golden early morning in a tiny rural town: a feed store, a six-stool diner, a church with a crooked steeple, a hand-painted sign reading "Eggs $3." The pickup crunches down a gravel road past a mailbox and stops before an old farmhouse with a sagging porch, peeling white paint, a rusted weathervane and a tin roof. Same man, 30s, short dark hair, stubble, tired but determined eyes, denim jacket, steps out and looks up, taking it in. A frail elderly widow with silver hair and a cardigan shuffles onto the porch and places a heavy iron key in his open palm, her weathered hand over his, a warm nod between them. Soft mist drifting over the fields, dew on the grass, a rooster crowing in the distance, a screen door swinging in the breeze. Realistic skin, fabric and wood texture, soft golden backlight, rack focus from the key to his face. [Static wide shot, then slow push in on the key handoff]
+
+SCENE 4 - THE WORK (9-12s)
+Cinematic vertical video, 9:16. Bright late-morning sun over a green pasture. Same man, 30s, short dark hair, stubble, tired but determined eyes, sleeves rolled to the elbow, sweat on his brow, dirt on his blistered hands, struggles to sink a wooden fence post with a post-hole digger, the post leaning crooked. A gruff older neighbor in a faded flannel shirt, suspenders and a sun-bleached cap, white beard, walks over, says nothing, wraps his hands around the post, straightens it, and tamps the soil with practiced ease. The man copies him, the post stands true, and the two share a silent nod and a faint smile. Tools, a wheelbarrow, coiled barbed wire and a water jug in the grass, cattle grazing in the background, dust and pollen floating in the sunbeams. Warm natural light, handheld documentary feel, realistic sweat and skin detail. [Handheld pan right, medium shot, slight push in on the nod]
+
+SCENE 5 - THE PEACE (12-15s)
+Cinematic vertical video, 9:16. Golden-hour sunset over a green valley farm. Same man, short dark hair, stubble, plaid shirt, sleeves rolled, dirt on his forearms, sits on the porch steps with a steaming coffee mug, eyes half closed, a calm smile. A scruffy stray dog sleeps on his worn boots. Behind him, straight rows of corn, tomatoes and sunflowers sway in the breeze, a red barn in the distance, chickens pecking near a wooden fence, two cows grazing in the pasture, a tractor parked beside a hay bale. Laundry flutters on a line, fireflies rise from the tall grass, soft mist settles over the fields. He breathes out slowly, shoulders relaxed, no phone in sight. Warm amber glow, serene and nostalgic tone, shallow depth of field. [Slow pull out, gentle drift]
+
+---------------------------------------------------------------------
+PART 3: VOICEOVER (deep, low-pitched, heavy male voice)
+---------------------------------------------------------------------
+
+VOICE DIRECTION (for ElevenLabs or any TTS):
+Deep, low-pitched male baritone, slow and heavy delivery, gravelly and grounded, calm authority, short pauses between lines, slight breath before each sentence. A weathered, confident narrator, not an announcer. Speed 0.85-0.9x, stability high, no upbeat tone. Last line is the slowest, softest and deepest.
+
+LINES:
+Scene 1 (0-3s):   "One night. I walked out."
+Scene 2 (3-6s):   "Drove until nobody knew my name."
+Scene 3 (6-9s):   "Found a place that gave me a chance."
+Scene 4 (9-12s):  "Learned work that meant something."
+Scene 5 (12-15s): "And finally... found peace."
+
+---------------------------------------------------------------------
+PART 4: BACKGROUND SOUND (per scene)
+---------------------------------------------------------------------
+
+SCENE 1: Low office hum, badge clacking on marble, revolving door whoosh, rain on pavement, truck door slam, engine rumble starting, tires on wet road.
+SCENE 2: Steady engine roar, wind rushing through the open window, tires humming on asphalt, thermos rattling, a hawk cry, distant power lines buzzing.
+SCENE 3: Truck engine cutting off, gravel crunching under boots, a rooster crowing, screen door creaking, wind through grass, soft metallic clink of the key.
+SCENE 4: Shovel biting dirt, post-hole digger thud, heavy thump of tamping soil, cattle lowing, heavy breathing, birds, wind, a faint chuckle from the neighbor.
+SCENE 5: Chickens clucking, a cow's low moo, crickets, a dog's sleepy sigh, a mug set down on wood, a light breeze rustling corn, laundry flapping, a distant tractor idling down.
+
+---------------------------------------------------------------------
+PART 5: MUSIC (score arc)
+---------------------------------------------------------------------
+
+SCENE 1: Dark, tense low drone with a single deep bass hit on the badge drop.
+SCENE 2: Bass drone lifts into a slow, warm guitar note as dawn breaks.
+SCENE 3: Gentle acoustic guitar, sparse and hopeful.
+SCENE 4: Slow rhythmic percussion like a heartbeat, soft strings building.
+SCENE 5: Calm, warm piano with soft ambient pads and a single sustained cello note, fading out gently over the last second.
+
+SUNO / UDIO MUSIC PROMPT (single 15-second track):
+"Cinematic instrumental, 15 seconds, starts with a dark low drone and a deep bass hit, rises into a warm slow acoustic guitar at dawn, builds with heartbeat-like soft percussion and strings, resolves into calm piano, ambient pads and a sustained cello, fading to silence. Masculine, grounded, nostalgic, no vocals, 60 BPM."
+
+---------------------------------------------------------------------
+PART 6: FULL-VIDEO SINGLE MASTER PROMPT (for models that accept one long prompt)
+---------------------------------------------------------------------
+Cinematic vertical 9:16 short film, 15 seconds, five 3-second scenes, same man throughout (30s, short dark hair, stubble, tired but determined eyes). Scene 1: night, glass office tower, he drops his ID badge on a marble desk, tosses his tie into an old pickup and drives off, cold blue to warm amber. Scene 2: dawn on an endless plain, denim jacket, elbow out the window, duffel and paperback on the seat, golden sky, hawk overhead. Scene 3: tiny rural town, gravel road, old farmhouse with a sagging porch, an elderly widow places an iron key in his palm, mist and rooster. Scene 4: sunny pasture, sweating and blistered, he struggles with a fence post until a gruff bearded neighbor in flannel straightens it, silent nod. Scene 5: golden-hour sunset on a green valley farm, he sits on the porch with steaming coffee, a stray dog asleep on his boots, rows of corn, tomatoes and sunflowers, red barn, chickens, cows, tractor, laundry line, fireflies, calm smile, peace. Realistic textures, film grain, shallow depth of field, heavy deep male voiceover, sound design of engines, wind, animals and rural life, ending with calm piano and cello.
+
+---------------------------------------------------------------------
+PART 7: ASSEMBLY AND MIXING NOTES
+---------------------------------------------------------------------
+- Generate Scene 1 first, then use a frame as the image reference (image-to-video) for Scenes 2-5 to keep the face consistent through wardrobe changes.
+- If a 3-second clip is not supported, generate at the minimum length and trim in editing.
+- If a scene gets muddled, cut it to its single key moment (badge drop, key handoff, the nod) and keep the rest as background.
+- In Scene 5, if details get dropped, remove the laundry and tractor first.
+- Audio is built separately: voiceover in ElevenLabs, music in Suno/Udio, sound effects in CapCut (free libraries: Pixabay, Freesound).
+- Mix levels: music -18 dB, sound effects -12 dB, voiceover -6 dB.
+- Boost 100-200 Hz on the voiceover for weight and bass.
+- Hard cut between Scenes 1 and 2 (engine sound carries across); crossfade audio in Scenes 3-5 so the mood softens.
+- Add the title "The Quiet Life" in CapCut instead of generating text in the video.
+- Turn off Hailuo native audio for full control, or keep it only as a reference layer.
+

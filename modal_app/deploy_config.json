@@ -1,0 +1,1 @@
+{"comfyui_version": "v0.37.0", "image": {"gpu": "L40S", "max_containers": 1, "min_containers": 0, "scaledown_window_s": 300, "max_inputs": 8, "startup_timeout_s": 1200}, "video": {"gpu": "L40S", "max_containers": 1, "min_containers": 0, "scaledown_window_s": 300, "max_inputs": 8, "startup_timeout_s": 1200}}
