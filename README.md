@@ -185,6 +185,52 @@ Notes:
 - **Scripts:** POST `workflows/minimax_h3_t2v_api.json` to `/prompt`, poll
   `/history/<prompt_id>`, fetch the MP4 from `/view`.
 
+### Long / "infinite-length" video (frame chaining)
+
+MiniMax H3 generates ~124-362 frames (~5-15 s) per pass. The trick for much
+longer videos is **last-frame → first-frame chaining**: decode each clip, take
+its final frame, and feed it into the `first_frame` input of the next
+segment's `MiniMaxH3ImageToVideo` node — motion and scene continue seamlessly,
+and you can chain as many segments as your time budget allows. All segments
+run **end-to-end in a single `/prompt` submission**, then get stitched into
+one MP4 (frames via `ImageBatch`, audio via the core `AudioConcat` node).
+
+`make_long_video_api.py` builds that chained workflow for any number of
+segments and drives it through the API:
+
+```powershell
+# 4 chained segments (~20 s) -- one prompt reused for every segment:
+python make_long_video_api.py --prompt "a sailboat crossing a calm sea at sunrise" --segments 4
+
+# Shot-by-shot story: one prompt per segment, from a JSON list:
+python make_long_video_api.py --prompts-json my_segments.json
+
+# No args: 4 built-in demo segments. --frames 362 for ~15 s segments,
+# --width/--height/--steps/--seed to taste, --dump out.json to only write
+# the workflow JSON without submitting.
+```
+
+A ready-made 4-segment example lives at `workflows/minimax_h3_long_video_api.json`
+(regenerate/inspect it with `python make_long_video_api.py --dump ...`). In the
+ComfyUI UI you can build the same thing visually: duplicate the sampler chain
+per segment and wire `VAEDecode → ImageFromBatch (batch_index -1) → first_frame`
+of the next `MiniMaxH3ImageToVideo` node.
+
+Caveats:
+
+- **Drift:** each segment is conditioned only on one frame, so colors/identity
+  can slowly drift over many segments. Keep the character/scene description
+  consistent in every segment prompt.
+- **Time budget:** each segment costs roughly one normal generation, all
+  sequential in one request — the Modal container caps a request at 1 h, so on
+  an L40S expect roughly 8-15 segments per call at 20 steps (more with the
+  turbo LoRA at 8 steps). For truly unlimited length, run the script
+  repeatedly and chain across runs (use the last frame of run N as a
+  `first_frame` LoadImage input in run N+1).
+- **Audio:** each segment generates its own soundtrack; they are concatenated
+  as-is, so write continuous ambience/music into every prompt for a smooth
+  soundscape.
+
 ## Authentication: token ID + secret
 
 The launchers authenticate with a **Modal API token** (ID + secret) instead of a
@@ -334,7 +380,8 @@ so scripts can talk to it too — e.g. POST an API-format workflow JSON to
 | File | What it is |
 |---|---|
 | `comfyui_app.py` | The Modal app: image, volumes, model downloads, web UI server |
-| `workflows/` | Ready-made ComfyUI workflows: `qwen_image_2.1.json` (text-to-image) and `qwen_image_2.1_edit.json` (image editing / reference images), each with an `_api` API-format variant |
+| `workflows/` | Ready-made ComfyUI workflows: `qwen_image_2.1.json` (text-to-image), `qwen_image_2.1_edit.json` (image editing / reference images) and `minimax_h3_t2v.json` (text-to-video), each with an `_api` API-format variant, plus `minimax_h3_long_video_api.json` (chained long video) |
+| `make_video_api.py` / `make_long_video_api.py` | API drivers: single MiniMax H3 clip / chained long video (submit → poll → download MP4) |
 | `launch.ps1` / `launch.sh` | One-click launcher (setup → auth → models → deploy → open site) |
 | `stop.ps1` / `stop.sh` | Take the app offline (stops GPU billing) |
 | `test_download_helper.py` | Offline smoke test of the model-download logic (no Modal account needed) |
